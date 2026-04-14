@@ -149,6 +149,22 @@ extension NSScreen {
         return NSRect(x: notchMinX, y: notchY, width: notchWidth, height: notchHeight)
     }
 
+    var topCenterAnchorRect: NSRect {
+        if let notchRect {
+            return notchRect
+        }
+
+        let menuBarHeight = max(28, frame.maxY - visibleFrame.maxY)
+        let width: CGFloat = 180
+
+        return NSRect(
+            x: frame.midX - (width / 2),
+            y: frame.maxY - menuBarHeight,
+            width: width,
+            height: menuBarHeight
+        )
+    }
+
     static func screen(containing point: NSPoint) -> NSScreen? {
         screens.first(where: { $0.frame.contains(point) })
     }

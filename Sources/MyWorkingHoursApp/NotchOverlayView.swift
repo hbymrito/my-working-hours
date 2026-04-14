@@ -5,133 +5,52 @@ struct NotchOverlayView: View {
     @EnvironmentObject private var overlayController: NotchOverlayController
     @EnvironmentObject private var mainWindowRouter: MainWindowRouter
 
-    @State private var isTaskSwitcherPresented = false
-
-    private var isPinned: Bool {
-        overlayController.mode == .pinned
-    }
-
     private var overlayWidth: CGFloat {
-        isPinned ? 470 : 390
+        520
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.96))
-                .frame(width: isPinned ? 220 : 180, height: 28)
-                .overlay(alignment: .bottom) {
-                    Capsule(style: .continuous)
-                        .fill(.black.opacity(0.28))
-                        .frame(width: isPinned ? 240 : 200, height: 8)
-                        .blur(radius: 8)
-                        .offset(y: 8)
-                }
+        HStack(spacing: 14) {
+            MarqueeText(
+                text: timerEngine.activeTask?.title ?? "未选择任务",
+                font: .system(size: 15, weight: .semibold, design: .rounded),
+                foregroundColor: foregroundColor.opacity(timerEngine.activeTask == nil ? 0.78 : 0.96)
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            GlassPanel(cornerRadius: 32) {
-                VStack(alignment: .leading, spacing: 20) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(timerEngine.activeTask?.title ?? "点击开始你的第一个任务")
-                                .font(.system(.title3, design: .rounded, weight: .semibold))
+            Text(DurationTextFormatter.clock(timerEngine.currentSessionDuration))
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(foregroundColor)
 
-                            Text(timerEngine.activeTask?.project?.name ?? "工时会在这里持续积累")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+            overlayButton(
+                systemImage: "play.fill",
+                tint: Color(hexString: PaletteColor.sky.rawValue),
+                isEnabled: timerEngine.timerState.status != .running
+            ) {
+                startOrPromptSelection()
+            }
 
-                        Spacer()
+            overlayButton(
+                systemImage: "pause.fill",
+                tint: Color(hexString: PaletteColor.lemon.rawValue),
+                isEnabled: timerEngine.timerState.status == .running
+            ) {
+                timerEngine.pauseTimer()
+            }
 
-                        StatusPill(status: timerEngine.timerState.status)
-                    }
-
-                    Text(DurationTextFormatter.clock(timerEngine.currentSessionDuration))
-                        .font(.system(size: isPinned ? 54 : 46, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-
-                    HStack(spacing: 12) {
-                        StatTile(
-                            title: "今日已累计",
-                            value: DurationTextFormatter.compact(timerEngine.todayTotalDuration),
-                            systemImage: "calendar",
-                            accent: Color(hexString: PaletteColor.lemon.rawValue)
-                        )
-
-                        StatTile(
-                            title: "当前任务",
-                            value: timerEngine.activeTask?.title ?? "未选择",
-                            systemImage: "briefcase.fill",
-                            accent: Color(hexString: PaletteColor.sky.rawValue)
-                        )
-                    }
-
-                    VStack(spacing: 12) {
-                        if timerEngine.timerState.status == .running {
-                            HStack(spacing: 12) {
-                                ActionCapsuleButton(
-                                    title: "暂停",
-                                    systemImage: "pause.fill",
-                                    tint: Color(hexString: PaletteColor.lemon.rawValue)
-                                ) {
-                                    timerEngine.pauseTimer()
-                                }
-
-                                ActionCapsuleButton(
-                                    title: "停止",
-                                    systemImage: "stop.fill",
-                                    tint: Color(hexString: PaletteColor.coral.rawValue)
-                                ) {
-                                    timerEngine.stopTimer()
-                                }
-                            }
-                        } else {
-                            ActionCapsuleButton(
-                                title: timerEngine.activeTask == nil ? "选择任务开始" : (timerEngine.timerState.status == .paused ? "继续计时" : "开始计时"),
-                                systemImage: "play.fill",
-                                tint: Color(hexString: PaletteColor.sky.rawValue)
-                            ) {
-                                startOrPromptSelection()
-                            }
-                        }
-
-                        if isPinned {
-                            HStack(spacing: 12) {
-                                Button {
-                                    isTaskSwitcherPresented = true
-                                } label: {
-                                    Label("切换任务", systemImage: "arrow.triangle.branch")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(SoftCapsuleButtonStyle(tint: .white.opacity(0.12), foreground: .primary))
-                                .popover(isPresented: $isTaskSwitcherPresented, arrowEdge: .top) {
-                                    QuickTaskSwitcherView { task in
-                                        activate(task)
-                                        isTaskSwitcherPresented = false
-                                        overlayController.showPinned()
-                                    }
-                                    .environmentObject(timerEngine)
-                                }
-
-                                Button {
-                                    if let activeTask = timerEngine.activeTask {
-                                        mainWindowRouter.open(.tasks(activeTask.id))
-                                    } else {
-                                        mainWindowRouter.open(.today)
-                                    }
-                                } label: {
-                                    Label("打开主界面", systemImage: "macwindow")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(SoftCapsuleButtonStyle(tint: .white.opacity(0.12), foreground: .primary))
-                            }
-                        }
-                    }
-                }
-                .padding(isPinned ? 22 : 20)
+            overlayButton(
+                systemImage: "stop.fill",
+                tint: Color(hexString: PaletteColor.coral.rawValue),
+                isEnabled: timerEngine.timerState.status != .idle || timerEngine.activeTask != nil
+            ) {
+                timerEngine.stopTimer()
             }
         }
+        .padding(.horizontal, 16)
+        .frame(width: overlayWidth, height: 56)
+        .background(backgroundShape)
         .frame(width: overlayWidth)
-        .padding(.top, 8)
         .background(Color.clear)
         .contentShape(Rectangle())
         .onHover { overlayController.overlayHoverChanged($0) }
@@ -140,21 +59,183 @@ struct NotchOverlayView: View {
 
     private func startOrPromptSelection() {
         guard timerEngine.activeTask != nil else {
-            overlayController.isTaskSwitcherPresented = true
-            isTaskSwitcherPresented = true
+            if timerEngine.timerState.status == .idle {
+                mainWindowRouter.open(.tasks(nil))
+            }
             return
         }
 
         try? timerEngine.startTimer()
     }
 
-    private func activate(_ task: WorkTask) {
-        if timerEngine.timerState.status == .running {
-            timerEngine.switchTask(to: task)
+    @ViewBuilder
+    private func overlayButton(systemImage: String, tint: Color, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            guard isEnabled else {
+                return
+            }
+
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .bold))
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(CompactOverlayButtonStyle(
+            tint: isEnabled ? tint : .gray.opacity(0.28),
+            foreground: .white,
+            usesDarkChrome: overlayController.chromeStyle == .notch
+        ))
+        .disabled(!isEnabled)
+    }
+
+    private var foregroundColor: Color {
+        overlayController.chromeStyle == .notch ? .white : .primary
+    }
+
+    @ViewBuilder
+    private var backgroundShape: some View {
+        let capsule = Capsule(style: .continuous)
+
+        if overlayController.chromeStyle == .notch {
+            capsule
+                .fill(Color.black.opacity(0.96))
+                .overlay {
+                    capsule
+                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 16, y: 10)
+        } else {
+            capsule
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    capsule
+                        .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+                }
+        }
+    }
+}
+
+private struct CompactOverlayButtonStyle: ButtonStyle {
+    let tint: Color
+    let foreground: Color
+    let usesDarkChrome: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foreground)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                tint.opacity(configuration.isPressed ? 0.84 : 1),
+                                tint.opacity(configuration.isPressed ? 0.68 : 0.9),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(
+                        usesDarkChrome ? .white.opacity(configuration.isPressed ? 0.08 : 0.18) : .white.opacity(configuration.isPressed ? 0.14 : 0.32),
+                        lineWidth: 1
+                    )
+            }
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.74), value: configuration.isPressed)
+    }
+}
+
+private struct MarqueeText: View {
+    let text: String
+    let font: Font
+    let foregroundColor: Color
+
+    private let gap: CGFloat = 28
+    private let speed: CGFloat = 32
+
+    @State private var textWidth: CGFloat = 0
+    @State private var availableWidth: CGFloat = 0
+    @State private var isAnimating = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack(alignment: .leading) {
+                if shouldScroll(in: width) {
+                    HStack(spacing: gap) {
+                        label
+                        label
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    .offset(x: isAnimating ? -(textWidth + gap) : 0)
+                } else {
+                    label
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .clipped()
+            .onAppear {
+                availableWidth = width
+                restartAnimationIfNeeded(for: width)
+            }
+            .onChange(of: width) { _, newValue in
+                availableWidth = newValue
+                restartAnimationIfNeeded(for: newValue)
+            }
+            .onChange(of: text) { _, _ in
+                restartAnimationIfNeeded(for: availableWidth)
+            }
+            .onChange(of: textWidth) { _, _ in
+                restartAnimationIfNeeded(for: availableWidth)
+            }
+        }
+        .frame(height: 22)
+    }
+
+    private var label: some View {
+        Text(text)
+            .font(font)
+            .lineLimit(1)
+            .foregroundStyle(foregroundColor)
+            .fixedSize(horizontal: true, vertical: false)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            textWidth = proxy.size.width
+                        }
+                        .onChange(of: proxy.size.width) { _, newValue in
+                            textWidth = newValue
+                        }
+                }
+            )
+    }
+
+    private func shouldScroll(in width: CGFloat) -> Bool {
+        textWidth > width + 6
+    }
+
+    private func restartAnimationIfNeeded(for width: CGFloat) {
+        guard width > 0 else {
             return
         }
 
-        timerEngine.selectTask(task)
-        try? timerEngine.startTimer()
+        let needsScroll = shouldScroll(in: width)
+        isAnimating = false
+
+        guard needsScroll else {
+            return
+        }
+
+        let duration = max(5, Double((textWidth + gap) / speed))
+        DispatchQueue.main.async {
+            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                isAnimating = true
+            }
+        }
     }
 }

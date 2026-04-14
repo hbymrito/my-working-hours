@@ -9,14 +9,20 @@ final class NotchOverlayController: NSObject, ObservableObject {
         case pinned
     }
 
+    enum ChromeStyle {
+        case notch
+        case menuBar
+    }
+
     @Published private(set) var mode: PresentationMode = .hidden
     @Published var isTaskSwitcherPresented = false
+    @Published private(set) var chromeStyle: ChromeStyle = .menuBar
 
     private let timerEngine: TimerEngine
     private let mainWindowRouter: MainWindowRouter
 
-    private weak var hitPanel: HitTargetPanel?
-    private weak var overlayPanel: OverlayFloatingPanel?
+    private var hitPanel: HitTargetPanel?
+    private var overlayPanel: OverlayFloatingPanel?
     private var panelObservers: [NSObjectProtocol] = []
     private var escapeKeyMonitor: Any?
     private var hoverOnHitTarget = false
@@ -69,10 +75,6 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     func showPinned() {
-        guard targetScreen()?.notchRect != nil else {
-            return
-        }
-
         hideWorkItem?.cancel()
         mode = .pinned
         updatePanels(animated: true)
@@ -80,7 +82,7 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     func showPeek() {
-        guard mode != .pinned, targetScreen()?.notchRect != nil else {
+        guard mode != .pinned else {
             return
         }
 
@@ -118,14 +120,18 @@ final class NotchOverlayController: NSObject, ObservableObject {
         hitPanel?.close()
         overlayPanel?.close()
 
-        guard let screen = targetScreen(), let notchRect = screen.notchRect else {
+        guard let screen = targetScreen() else {
             return
         }
+        let anchorRect = screen.topCenterAnchorRect
+        chromeStyle = screen.notchRect == nil ? .menuBar : .notch
 
-        let hitPanel = HitTargetPanel(contentRect: hitTargetFrame(for: notchRect), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let hitPanel = HitTargetPanel(contentRect: hitTargetFrame(for: anchorRect), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         hitPanel.backgroundColor = .clear
         hitPanel.isOpaque = false
         hitPanel.level = .statusBar
+        hitPanel.ignoresMouseEvents = false
+        hitPanel.isReleasedWhenClosed = false
         hitPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
 
         let tracker = InteractionTrackingView(frame: NSRect(origin: .zero, size: hitPanel.frame.size))
@@ -150,7 +156,7 @@ final class NotchOverlayController: NSObject, ObservableObject {
         hitPanel.orderFrontRegardless()
         self.hitPanel = hitPanel
 
-        let overlayPanel = OverlayFloatingPanel(contentRect: hiddenOverlayFrame(for: notchRect), styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
+        let overlayPanel = OverlayFloatingPanel(contentRect: hiddenOverlayFrame(for: anchorRect), styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
         overlayPanel.backgroundColor = .clear
         overlayPanel.isOpaque = false
         overlayPanel.hasShadow = false
@@ -158,6 +164,7 @@ final class NotchOverlayController: NSObject, ObservableObject {
         overlayPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         overlayPanel.hidesOnDeactivate = false
         overlayPanel.isMovableByWindowBackground = false
+        overlayPanel.isReleasedWhenClosed = false
         overlayPanel.contentView = NSHostingView(
             rootView: NotchOverlayView()
                 .environmentObject(timerEngine)
@@ -173,16 +180,17 @@ final class NotchOverlayController: NSObject, ObservableObject {
     private func updatePanels(animated: Bool) {
         guard let hitPanel,
               let overlayPanel,
-              let screen = targetScreen(),
-              let notchRect = screen.notchRect
+              let screen = targetScreen()
         else {
             return
         }
+        let anchorRect = screen.topCenterAnchorRect
+        chromeStyle = screen.notchRect == nil ? .menuBar : .notch
 
-        hitPanel.setFrame(hitTargetFrame(for: notchRect), display: true)
+        hitPanel.setFrame(hitTargetFrame(for: anchorRect), display: true)
 
-        let visibleFrame = overlayFrame(for: notchRect, mode: mode == .hidden ? .peek : mode)
-        let collapsedFrame = hiddenOverlayFrame(for: notchRect)
+        let visibleFrame = overlayFrame(for: anchorRect, mode: mode == .hidden ? .peek : mode)
+        let collapsedFrame = hiddenOverlayFrame(for: anchorRect)
 
         switch mode {
         case .hidden:
@@ -257,60 +265,65 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     private func targetScreen() -> NSScreen? {
-        if let hoveredScreen = NSScreen.screen(containing: NSEvent.mouseLocation), hoveredScreen.notchRect != nil {
+        if let hoveredScreen = NSScreen.screen(containing: NSEvent.mouseLocation) {
             return hoveredScreen
         }
 
-        if let mainScreen = NSScreen.main, mainScreen.notchRect != nil {
+        if let mainScreen = NSScreen.main {
             return mainScreen
         }
 
-        return NSScreen.screens.first(where: { $0.notchRect != nil })
+        return NSScreen.screens.first
     }
 
-    private func hitTargetFrame(for notchRect: NSRect) -> NSRect {
-        let width = max(notchRect.width + 92, 210)
-        let height = max(notchRect.height + 10, 34)
+    private func hitTargetFrame(for anchorRect: NSRect) -> NSRect {
+        let width = max(anchorRect.width + 140, 280)
+        let height = max(anchorRect.height + 10, 34)
 
         return NSRect(
-            x: notchRect.midX - (width / 2),
-            y: notchRect.minY - 4,
+            x: anchorRect.midX - (width / 2),
+            y: anchorRect.minY - 4,
             width: width,
             height: height
         )
     }
 
-    private func hiddenOverlayFrame(for notchRect: NSRect) -> NSRect {
-        let width: CGFloat = 220
-        let height: CGFloat = 48
+    private func hiddenOverlayFrame(for anchorRect: NSRect) -> NSRect {
+        let width: CGFloat = 260
+        let height: CGFloat = 40
+        let verticalInset: CGFloat = anchorRect.width < 200 ? 8 : 30
 
         return NSRect(
-            x: notchRect.midX - (width / 2),
-            y: notchRect.minY - height + 22,
+            x: anchorRect.midX - (width / 2),
+            y: anchorRect.minY - height + verticalInset,
             width: width,
             height: height
         )
     }
 
-    private func overlayFrame(for notchRect: NSRect, mode: PresentationMode) -> NSRect {
+    private func overlayFrame(for anchorRect: NSRect, mode: PresentationMode) -> NSRect {
         let width: CGFloat
         let height: CGFloat
+        let verticalInset: CGFloat
 
         switch mode {
         case .hidden:
-            width = 220
-            height = 48
+            width = 260
+            height = 40
+            verticalInset = anchorRect.width < 200 ? 8 : 30
         case .peek:
-            width = 390
-            height = 280
+            width = 520
+            height = 68
+            verticalInset = anchorRect.width < 200 ? 6 : 34
         case .pinned:
-            width = 470
-            height = 390
+            width = 520
+            height = 68
+            verticalInset = anchorRect.width < 200 ? 6 : 34
         }
 
         return NSRect(
-            x: notchRect.midX - (width / 2),
-            y: notchRect.minY - height + 24,
+            x: anchorRect.midX - (width / 2),
+            y: anchorRect.minY - height + verticalInset,
             width: width,
             height: height
         )

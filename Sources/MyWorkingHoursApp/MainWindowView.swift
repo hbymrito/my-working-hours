@@ -1,8 +1,7 @@
-import Combine
 import SwiftData
 import SwiftUI
 
-private enum SidebarSection: String, CaseIterable, Identifiable {
+private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     case today
     case tasks
     case projects
@@ -42,7 +41,7 @@ struct MainWindowView: View {
     @Query(sort: [SortDescriptor(\Tag.createdAt)]) private var tags: [Tag]
     @Query(sort: [SortDescriptor(\TimeEntry.startAt, order: .reverse)]) private var entries: [TimeEntry]
 
-    @State private var selectedSection: SidebarSection = .today
+    @State private var selectedSection: SidebarSection? = .today
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
     @State private var selectedProjectID: UUID?
@@ -55,6 +54,10 @@ struct MainWindowView: View {
 
     private var todaySummaries: [TaskSummary] {
         timerEngine.aggregationService.groupedDurations(on: timerEngine.now, entries: entries, now: timerEngine.now)
+    }
+
+    private var activeSection: SidebarSection {
+        selectedSection ?? .today
     }
 
     private var todayEntries: [TimeEntry] {
@@ -107,14 +110,16 @@ struct MainWindowView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SidebarSection.allCases, selection: $selectedSection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
+            List(selection: $selectedSection) {
+                ForEach(SidebarSection.allCases, id: \.self) { section in
+                    Label(section.title, systemImage: section.systemImage)
+                        .tag(Optional(section))
+                }
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 220)
         } content: {
             contentColumn
-                .navigationTitle(selectedSection.title)
+                .navigationTitle(activeSection.title)
         } detail: {
             detailColumn
         }
@@ -122,14 +127,14 @@ struct MainWindowView: View {
         .toolbar {
             toolbarContent
         }
-        .onReceive(mainWindowRouter.$destination.removeDuplicates()) { destination in
+        .onChange(of: mainWindowRouter.destination, initial: true) { _, destination in
             apply(destination)
         }
     }
 
     @ViewBuilder
     private var contentColumn: some View {
-        switch selectedSection {
+        switch activeSection {
         case .today:
             todayContent
         case .tasks:
@@ -160,10 +165,18 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var detailColumn: some View {
-        switch selectedSection {
+        switch activeSection {
         case .today:
             if let selectedTask = tasks.first(where: { $0.id == selectedTaskID }) {
-                TaskInspector(task: selectedTask, entries: entries, projects: projects, tags: tags, timerEngine: timerEngine, modelContext: modelContext)
+                TaskInspector(
+                    task: selectedTask,
+                    entries: entries,
+                    projects: projects,
+                    tags: tags,
+                    timerEngine: timerEngine,
+                    modelContext: modelContext,
+                    onDelete: { deleteTask(selectedTask) }
+                )
             } else {
                 TodayOverview(
                     summaries: todaySummaries,
@@ -173,7 +186,15 @@ struct MainWindowView: View {
             }
         case .tasks:
             if let selectedTask = tasks.first(where: { $0.id == selectedTaskID }) {
-                TaskInspector(task: selectedTask, entries: entries, projects: projects, tags: tags, timerEngine: timerEngine, modelContext: modelContext)
+                TaskInspector(
+                    task: selectedTask,
+                    entries: entries,
+                    projects: projects,
+                    tags: tags,
+                    timerEngine: timerEngine,
+                    modelContext: modelContext,
+                    onDelete: { deleteTask(selectedTask) }
+                )
             } else {
                 EmptyStateView(
                     title: "选择一个任务",
@@ -203,7 +224,13 @@ struct MainWindowView: View {
             }
         case .records:
             if let selectedEntry = entries.first(where: { $0.id == selectedEntryID }) {
-                TimeEntryInspector(entry: selectedEntry, tasks: tasks, timerEngine: timerEngine, modelContext: modelContext)
+                TimeEntryInspector(
+                    entry: selectedEntry,
+                    tasks: tasks,
+                    timerEngine: timerEngine,
+                    modelContext: modelContext,
+                    onDelete: { deleteEntry(selectedEntry) }
+                )
             } else {
                 EmptyStateView(
                     title: "选择一条记录",
@@ -296,7 +323,7 @@ struct MainWindowView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            switch selectedSection {
+            switch activeSection {
             case .today, .tasks:
                 Button {
                     let task = WorkTask(title: "新任务", updatedAt: Date())
@@ -365,6 +392,50 @@ struct MainWindowView: View {
             try modelContext.save()
         } catch {
             assertionFailure("Unable to save changes: \(error)")
+        }
+    }
+
+    private func deleteTask(_ task: WorkTask) {
+        let taskID = task.id
+
+        if timerEngine.activeTask?.id == taskID {
+            timerEngine.stopTimer()
+        }
+
+        if selectedTaskID == taskID {
+            selectedTaskID = nil
+        }
+
+        DispatchQueue.main.async {
+            let relatedEntries = entries.filter { $0.task?.id == taskID }
+            relatedEntries.forEach(modelContext.delete)
+
+            if let currentTask = tasks.first(where: { $0.id == taskID }) {
+                modelContext.delete(currentTask)
+            }
+
+            persist()
+        }
+    }
+
+    private func deleteEntry(_ entry: TimeEntry) {
+        let entryID = entry.id
+
+        if selectedEntryID == entryID {
+            selectedEntryID = nil
+        }
+
+        if timerEngine.activeEntry?.id == entryID || entry.endAt == nil {
+            timerEngine.stopTimer()
+        }
+
+        DispatchQueue.main.async {
+            guard let currentEntry = entries.first(where: { $0.id == entryID }) else {
+                return
+            }
+
+            modelContext.delete(currentEntry)
+            persist()
         }
     }
 
@@ -535,6 +606,7 @@ private struct TaskInspector: View {
     let tags: [Tag]
     let timerEngine: TimerEngine
     let modelContext: ModelContext
+    let onDelete: () -> Void
 
     private var taskEntries: [TimeEntry] {
         entries.filter { $0.task?.id == task.id }
@@ -696,12 +768,7 @@ private struct TaskInspector: View {
             }
 
             Button(role: .destructive) {
-                if timerEngine.activeTask?.id == task.id {
-                    timerEngine.stopTimer()
-                }
-                taskEntries.forEach(modelContext.delete)
-                modelContext.delete(task)
-                saveTaskChanges()
+                onDelete()
             } label: {
                 Label("删除任务", systemImage: "trash")
             }
@@ -863,6 +930,7 @@ private struct TimeEntryInspector: View {
     let tasks: [WorkTask]
     let timerEngine: TimerEngine
     let modelContext: ModelContext
+    let onDelete: () -> Void
 
     private var isRunningEntry: Bool {
         entry.endAt == nil
@@ -919,8 +987,7 @@ private struct TimeEntryInspector: View {
                         }
 
                         Button(role: .destructive) {
-                            modelContext.delete(entry)
-                            persist()
+                            onDelete()
                         } label: {
                             Label("删除记录", systemImage: "trash")
                         }
