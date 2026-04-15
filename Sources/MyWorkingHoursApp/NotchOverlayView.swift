@@ -9,42 +9,65 @@ struct NotchOverlayView: View {
         520
     }
 
+    private var displayTitle: String {
+        guard let primary = timerEngine.primaryTask else {
+            return "未选择任务"
+        }
+        if timerEngine.runningCount > 1 {
+            return "\(primary.title) +\(timerEngine.runningCount - 1)"
+        }
+        return primary.title
+    }
+
+    private var hasActiveTasks: Bool {
+        timerEngine.runningCount > 0 || timerEngine.pausedCount > 0
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             MarqueeText(
-                text: timerEngine.activeTask?.title ?? "未选择任务",
+                text: displayTitle,
                 font: .system(size: 15, weight: .semibold, design: .rounded),
-                foregroundColor: foregroundColor.opacity(timerEngine.activeTask == nil ? 0.78 : 0.96)
+                foregroundColor: foregroundColor.opacity(timerEngine.primaryTask == nil ? 0.78 : 0.96)
             )
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(DurationTextFormatter.clock(timerEngine.currentSessionDuration))
+            Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
                 .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(foregroundColor)
 
+            // Play / add task
             overlayButton(
-                systemImage: "play.fill",
+                systemImage: timerEngine.runningCount > 0 ? "plus" : "play.fill",
                 tint: Color(hexString: PaletteColor.sky.rawValue),
-                isEnabled: timerEngine.timerState.status != .running
+                isEnabled: true
             ) {
-                startOrPromptSelection()
+                if timerEngine.runningCount > 0 {
+                    mainWindowRouter.open(.tasks(nil))
+                } else if let primary = timerEngine.primaryTask {
+                    timerEngine.start(task: primary)
+                } else {
+                    mainWindowRouter.open(.tasks(nil))
+                }
             }
 
+            // Pause all
             overlayButton(
                 systemImage: "pause.fill",
                 tint: Color(hexString: PaletteColor.lemon.rawValue),
-                isEnabled: timerEngine.timerState.status == .running
+                isEnabled: timerEngine.runningCount > 0
             ) {
-                timerEngine.pauseTimer()
+                timerEngine.pauseAll()
             }
 
+            // Stop all
             overlayButton(
                 systemImage: "stop.fill",
                 tint: Color(hexString: PaletteColor.coral.rawValue),
-                isEnabled: timerEngine.timerState.status != .idle || timerEngine.activeTask != nil
+                isEnabled: hasActiveTasks
             ) {
-                timerEngine.stopTimer()
+                timerEngine.stopAll()
             }
         }
         .padding(.horizontal, 16)
@@ -55,17 +78,6 @@ struct NotchOverlayView: View {
         .contentShape(Rectangle())
         .onHover { overlayController.overlayHoverChanged($0) }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: overlayController.mode)
-    }
-
-    private func startOrPromptSelection() {
-        guard timerEngine.activeTask != nil else {
-            if timerEngine.timerState.status == .idle {
-                mainWindowRouter.open(.tasks(nil))
-            }
-            return
-        }
-
-        try? timerEngine.startTimer()
     }
 
     @ViewBuilder
