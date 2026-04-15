@@ -15,6 +15,7 @@ enum TimeEntrySource: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Per-task display state, derived by the View layer from Engine's `isTaskRunning` / `isTaskPaused`.
 enum TimerStatus: String, Codable, CaseIterable, Identifiable {
     case idle
     case running
@@ -32,18 +33,60 @@ enum TimerStatus: String, Codable, CaseIterable, Identifiable {
 }
 
 struct TimerState: Codable, Equatable {
-    var activeTaskID: UUID?
-    var activeEntryStartAt: Date?
-    var status: TimerStatus
+    var primaryTaskID: UUID?
+    var pausedTaskIDs: Set<UUID>
     var lastInteractionAt: Date
 
+    /// Derived overview status, updated by TimerEngine before each save.
+    /// Used by UI compat shims — not the source of truth for parallel state.
+    var status: TimerStatus = .idle
+
+    private enum CodingKeys: String, CodingKey {
+        case primaryTaskID, pausedTaskIDs, lastInteractionAt
+    }
+
     static func idle(now: Date = .now) -> Self {
-        Self(
-            activeTaskID: nil,
-            activeEntryStartAt: nil,
-            status: .idle,
-            lastInteractionAt: now
-        )
+        Self(primaryTaskID: nil, pausedTaskIDs: [], lastInteractionAt: now)
+    }
+
+    // MARK: - Migration from v1 format
+
+    private struct V1: Decodable {
+        var activeTaskID: UUID?
+        var activeEntryStartAt: Date?
+        var status: TimerStatus
+        var lastInteractionAt: Date
+    }
+
+    init(primaryTaskID: UUID? = nil, pausedTaskIDs: Set<UUID> = [], lastInteractionAt: Date = .now) {
+        self.primaryTaskID = primaryTaskID
+        self.pausedTaskIDs = pausedTaskIDs
+        self.lastInteractionAt = lastInteractionAt
+    }
+
+    init(from decoder: Decoder) throws {
+        // Try new format first
+        if let container = try? decoder.container(keyedBy: CodingKeys.self),
+           let primaryTaskID = try? container.decodeIfPresent(UUID.self, forKey: .primaryTaskID),
+           let pausedTaskIDs = try? container.decode(Set<UUID>.self, forKey: .pausedTaskIDs),
+           let lastInteractionAt = try? container.decode(Date.self, forKey: .lastInteractionAt)
+        {
+            self.primaryTaskID = primaryTaskID
+            self.pausedTaskIDs = pausedTaskIDs
+            self.lastInteractionAt = lastInteractionAt
+            return
+        }
+
+        // Fall back to v1 format
+        let v1 = try V1(from: decoder)
+        self.primaryTaskID = v1.activeTaskID
+        self.lastInteractionAt = v1.lastInteractionAt
+
+        if v1.status == .paused, let taskID = v1.activeTaskID {
+            self.pausedTaskIDs = [taskID]
+        } else {
+            self.pausedTaskIDs = []
+        }
     }
 }
 

@@ -11,7 +11,7 @@ struct QuickTaskSwitcherView: View {
     let onSelect: (WorkTask) -> Void
 
     private var activeProjectID: UUID? {
-        timerEngine.activeTask?.project?.id
+        timerEngine.primaryTask?.project?.id
     }
 
     private var filteredTasks: [WorkTask] {
@@ -41,7 +41,7 @@ struct QuickTaskSwitcherView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("快速切换任务")
+                Text("加入并行任务")
                     .font(.headline.weight(.semibold))
 
                 Spacer()
@@ -71,7 +71,7 @@ struct QuickTaskSwitcherView: View {
             .frame(minWidth: 320, minHeight: 300)
 
             if tasks.isEmpty {
-                Text("还没有任务，输入名字后点击“新建并开始”即可。")
+                Text("还没有任务，输入名字后点击\u{201C}新建并开始\u{201D}即可。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -100,8 +100,10 @@ struct QuickTaskSwitcherView: View {
 
                 Spacer()
 
-                if timerEngine.activeTask?.id == task.id {
-                    StatusPill(status: timerEngine.timerState.status)
+                if timerEngine.isTaskRunning(task) {
+                    StatusPill(status: .running)
+                } else if timerEngine.isTaskPaused(task) {
+                    StatusPill(status: .paused)
                 }
             }
             .contentShape(Rectangle())
@@ -112,7 +114,7 @@ struct QuickTaskSwitcherView: View {
     private func createTask() {
         let task = timerEngine.createTask(
             named: searchText,
-            project: timerEngine.activeTask?.project
+            project: timerEngine.primaryTask?.project
         )
         onSelect(task)
     }

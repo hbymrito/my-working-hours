@@ -17,20 +17,31 @@ struct MenuBarContentView: View {
 
     @State private var isTaskSwitcherPresented = false
 
-    private var hasSelectedTask: Bool {
-        timerEngine.activeTask != nil
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Primary task header
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(timerEngine.activeTask?.title ?? "还没有开始计时")
-                        .font(.headline.weight(.semibold))
-
-                    Text(timerEngine.activeTask?.project?.name ?? "选择一个任务后开始")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let primary = timerEngine.primaryTask {
+                        HStack(spacing: 6) {
+                            Text(primary.title)
+                                .font(.headline.weight(.semibold))
+                            if timerEngine.runningCount > 1 {
+                                Text("+\(timerEngine.runningCount - 1)")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(primary.project?.name ?? "未分配项目")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("还没有开始计时")
+                            .font(.headline.weight(.semibold))
+                        Text("选择一个任务后开始")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -38,70 +49,110 @@ struct MenuBarContentView: View {
                 StatusPill(status: timerEngine.timerState.status)
             }
 
+            // Duration panel
             GlassPanel(cornerRadius: 24) {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(DurationTextFormatter.clock(timerEngine.currentSessionDuration))
+                    Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
                         .font(.system(size: 38, weight: .semibold, design: .rounded))
                         .monospacedDigit()
 
                     HStack(spacing: 12) {
                         StatTile(
-                            title: "今日累计",
+                            title: "累计工时",
                             value: DurationTextFormatter.compact(timerEngine.todayTotalDuration),
-                            systemImage: "sun.max.fill",
+                            systemImage: "calendar.badge.clock",
                             accent: Color(hexString: PaletteColor.lemon.rawValue)
                         )
 
                         StatTile(
-                            title: "当前状态",
-                            value: timerEngine.timerState.status.displayTitle,
-                            systemImage: timerEngine.timerState.status.symbolName,
-                            accent: timerEngine.timerState.status.tint
+                            title: "实际经过",
+                            value: DurationTextFormatter.compact(timerEngine.todayWallClockDuration),
+                            systemImage: "clock.fill",
+                            accent: Color(hexString: PaletteColor.sky.rawValue)
                         )
                     }
                 }
                 .padding(18)
             }
 
+            // Running tasks list
+            if !timerEngine.runningTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("运行中")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(timerEngine.runningTasks, id: \.id) { task in
+                        taskControlRow(task: task, isRunning: true)
+                    }
+                }
+            }
+
+            // Paused tasks list
+            if !timerEngine.pausedTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("已暂停")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(timerEngine.pausedTasks, id: \.id) { task in
+                        taskControlRow(task: task, isRunning: false)
+                    }
+                }
+            }
+
+            // Global actions
             VStack(spacing: 10) {
-                if timerEngine.timerState.status == .running {
+                if timerEngine.runningCount > 0 {
                     HStack(spacing: 10) {
                         ActionCapsuleButton(
-                            title: "暂停",
+                            title: "全部暂停",
                             systemImage: "pause.fill",
                             tint: Color(hexString: PaletteColor.lemon.rawValue)
                         ) {
-                            timerEngine.pauseTimer()
+                            timerEngine.pauseAll()
                         }
 
                         ActionCapsuleButton(
-                            title: "停止",
+                            title: "全部停止",
                             systemImage: "stop.fill",
                             tint: Color(hexString: PaletteColor.coral.rawValue)
                         ) {
-                            timerEngine.stopTimer()
+                            timerEngine.stopAll()
+                        }
+                    }
+                } else if timerEngine.pausedCount > 0 {
+                    // All paused — offer to resume primary
+                    if let primary = timerEngine.primaryTask {
+                        ActionCapsuleButton(
+                            title: "恢复 \(primary.title)",
+                            systemImage: "play.fill",
+                            tint: Color(hexString: PaletteColor.sky.rawValue)
+                        ) {
+                            timerEngine.start(task: primary)
                         }
                     }
                 } else {
+                    // Idle
                     ActionCapsuleButton(
-                        title: hasSelectedTask ? (timerEngine.timerState.status == .paused ? "继续计时" : "开始计时") : "选择任务开始",
+                        title: "选择任务开始",
                         systemImage: "play.fill",
                         tint: Color(hexString: PaletteColor.sky.rawValue)
                     ) {
-                        startOrPromptSelection()
+                        isTaskSwitcherPresented = true
                     }
                 }
 
                 Button {
                     isTaskSwitcherPresented = true
                 } label: {
-                    Label("快速切换任务", systemImage: "arrow.triangle.branch")
+                    Label("加入并行任务", systemImage: "plus.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SoftCapsuleButtonStyle(tint: Color.white.opacity(0.1), foreground: .primary))
                 .popover(isPresented: $isTaskSwitcherPresented, arrowEdge: .bottom) {
                     QuickTaskSwitcherView { task in
-                        activate(task)
+                        timerEngine.start(task: task)
                         isTaskSwitcherPresented = false
                     }
                     .environmentObject(timerEngine)
@@ -112,8 +163,8 @@ struct MenuBarContentView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 menuAction("打开主界面", systemImage: "macwindow") {
-                    if let activeTask = timerEngine.activeTask {
-                        mainWindowRouter.open(.tasks(activeTask.id))
+                    if let primaryTask = timerEngine.primaryTask {
+                        mainWindowRouter.open(.tasks(primaryTask.id))
                     } else {
                         mainWindowRouter.open(.today)
                     }
@@ -136,6 +187,62 @@ struct MenuBarContentView: View {
     }
 
     @ViewBuilder
+    private func taskControlRow(task: WorkTask, isRunning: Bool) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color(hexString: task.project?.colorHex ?? PaletteColor.sky.rawValue))
+                .frame(width: 8, height: 8)
+
+            Text(task.title)
+                .font(.subheadline)
+                .lineLimit(1)
+
+            Spacer()
+
+            if timerEngine.primaryTask?.id != task.id {
+                Button {
+                    timerEngine.setPrimaryTask(task)
+                } label: {
+                    Image(systemName: "star")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help("设为主任务")
+            }
+
+            if isRunning {
+                Button {
+                    timerEngine.pause(task: task)
+                } label: {
+                    Image(systemName: "pause.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color(hexString: PaletteColor.lemon.rawValue))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    timerEngine.start(task: task)
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color(hexString: PaletteColor.sky.rawValue))
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                timerEngine.stop(task: task)
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color(hexString: PaletteColor.coral.rawValue))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
     private func menuAction(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
@@ -143,24 +250,5 @@ struct MenuBarContentView: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, 4)
-    }
-
-    private func startOrPromptSelection() {
-        guard hasSelectedTask else {
-            isTaskSwitcherPresented = true
-            return
-        }
-
-        try? timerEngine.startTimer()
-    }
-
-    private func activate(_ task: WorkTask) {
-        if timerEngine.timerState.status == .running {
-            timerEngine.switchTask(to: task)
-            return
-        }
-
-        timerEngine.selectTask(task)
-        try? timerEngine.startTimer()
     }
 }

@@ -27,6 +27,44 @@ struct TimeAggregationService {
         }
     }
 
+    /// Merge overlapping time segments and return the actual elapsed wall-clock time.
+    func wallClockDuration(on day: Date, entries: [TimeEntry], now: Date) -> TimeInterval {
+        mergedIntervals(on: day, entries: entries, now: now)
+            .reduce(into: 0) { total, interval in
+                total += interval.end.timeIntervalSince(interval.start)
+            }
+    }
+
+    /// Clip entries to the given day, sort by start, then merge overlapping segments.
+    func mergedIntervals(on day: Date, entries: [TimeEntry], now: Date) -> [(start: Date, end: Date)] {
+        let dayInterval = dayInterval(for: day)
+
+        // Clip each entry to the day boundary
+        var segments: [(start: Date, end: Date)] = []
+        for entry in entries {
+            let effectiveEnd = entry.endAt ?? now
+            let clippedStart = max(entry.startAt, dayInterval.start)
+            let clippedEnd = min(effectiveEnd, dayInterval.end)
+            guard clippedEnd > clippedStart else { continue }
+            segments.append((clippedStart, clippedEnd))
+        }
+
+        guard !segments.isEmpty else { return [] }
+
+        segments.sort { $0.start < $1.start }
+
+        var merged: [(start: Date, end: Date)] = [segments[0]]
+        for segment in segments.dropFirst() {
+            if segment.start <= merged[merged.count - 1].end {
+                merged[merged.count - 1].end = max(merged[merged.count - 1].end, segment.end)
+            } else {
+                merged.append(segment)
+            }
+        }
+
+        return merged
+    }
+
     func totalDuration(for task: WorkTask, entries: [TimeEntry], now: Date) -> TimeInterval {
         entries.reduce(into: 0) { total, entry in
             let endAt = entry.endAt ?? now
