@@ -109,8 +109,8 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     func openMainWindow() {
-        if let activeTask = timerEngine.activeTask {
-            mainWindowRouter.open(.tasks(activeTask.id))
+        if let primaryTask = timerEngine.primaryTask {
+            mainWindowRouter.open(.tasks(primaryTask.id))
         } else {
             mainWindowRouter.open(.today)
         }

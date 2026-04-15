@@ -54,6 +54,19 @@ struct MainWindowView: View {
 
     private var todaySummaries: [TaskSummary] {
         timerEngine.aggregationService.groupedDurations(on: timerEngine.now, entries: entries, now: timerEngine.now)
+            .sorted { a, b in
+                let aOrder = taskSortOrder(a.task)
+                let bOrder = taskSortOrder(b.task)
+                if aOrder != bOrder { return aOrder < bOrder }
+                return a.duration > b.duration
+            }
+    }
+
+    /// Running = 0, Paused = 1, Stopped = 2 — for sorting active tasks first.
+    private func taskSortOrder(_ task: WorkTask) -> Int {
+        if timerEngine.isTaskRunning(task) { return 0 }
+        if timerEngine.isTaskPaused(task) { return 1 }
+        return 2
     }
 
     private var activeSection: SidebarSection {
@@ -398,8 +411,9 @@ struct MainWindowView: View {
     private func deleteTask(_ task: WorkTask) {
         let taskID = task.id
 
-        if timerEngine.activeTask?.id == taskID {
-            timerEngine.stopTimer()
+        // Only stop this specific task, not the whole workbench
+        if timerEngine.isTaskRunning(task) || timerEngine.isTaskPaused(task) {
+            timerEngine.stop(task: task)
         }
 
         if selectedTaskID == taskID {
@@ -425,8 +439,9 @@ struct MainWindowView: View {
             selectedEntryID = nil
         }
 
-        if timerEngine.activeEntry?.id == entryID || entry.endAt == nil {
-            timerEngine.stopTimer()
+        // Only stop the task owning this entry, not the whole workbench
+        if entry.endAt == nil, let task = entry.task {
+            timerEngine.stop(task: task)
         }
 
         DispatchQueue.main.async {
@@ -453,6 +468,12 @@ private struct TaskRow: View {
     let task: WorkTask
     let timerEngine: TimerEngine
 
+    private var taskStatus: TimerStatus {
+        if timerEngine.isTaskRunning(task) { return .running }
+        if timerEngine.isTaskPaused(task) { return .paused }
+        return .idle
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Circle()
@@ -469,8 +490,8 @@ private struct TaskRow: View {
 
             Spacer()
 
-            if timerEngine.activeTask?.id == task.id {
-                StatusPill(status: timerEngine.timerState.status)
+            if taskStatus != .idle {
+                StatusPill(status: taskStatus)
             }
         }
     }
@@ -542,6 +563,15 @@ private struct TodayOverview: View {
     let entries: [TimeEntry]
     let timerEngine: TimerEngine
 
+    private var statusText: String {
+        if timerEngine.runningCount > 0 {
+            return "运行中 \(timerEngine.runningCount) 个"
+        } else if timerEngine.pausedCount > 0 {
+            return "已暂停 \(timerEngine.pausedCount) 个"
+        }
+        return "待机"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -552,15 +582,24 @@ private struct TodayOverview: View {
 
                         HStack(spacing: 16) {
                             StatTile(
-                                title: "今日累计",
+                                title: "累计工时",
                                 value: DurationTextFormatter.compact(timerEngine.todayTotalDuration),
                                 systemImage: "calendar.badge.clock",
                                 accent: Color(hexString: PaletteColor.lemon.rawValue)
                             )
 
                             StatTile(
+                                title: "实际经过",
+                                value: DurationTextFormatter.compact(timerEngine.todayWallClockDuration),
+                                systemImage: "clock.fill",
+                                accent: Color(hexString: PaletteColor.sky.rawValue)
+                            )
+                        }
+
+                        HStack(spacing: 16) {
+                            StatTile(
                                 title: "当前状态",
-                                value: timerEngine.timerState.status.displayTitle,
+                                value: statusText,
                                 systemImage: timerEngine.timerState.status.symbolName,
                                 accent: timerEngine.timerState.status.tint
                             )
@@ -600,7 +639,7 @@ private struct TodayOverview: View {
 }
 
 private struct TaskInspector: View {
-    let task: WorkTask
+    @Bindable var task: WorkTask
     let entries: [TimeEntry]
     let projects: [Project]
     let tags: [Tag]
@@ -617,9 +656,10 @@ private struct TaskInspector: View {
             VStack(alignment: .leading, spacing: 20) {
                 GlassPanel(cornerRadius: 28) {
                     VStack(alignment: .leading, spacing: 18) {
-                        TextField("任务名称", text: titleBinding)
+                        TextField("任务名称", text: $task.title)
                             .font(.system(.title2, design: .rounded, weight: .semibold))
                             .textFieldStyle(.plain)
+                            .onChange(of: task.title) { _, _ in saveTaskChanges() }
 
                         Picker("所属项目", selection: projectBinding) {
                             Text("无项目").tag(Optional<UUID>.none)
@@ -628,17 +668,19 @@ private struct TaskInspector: View {
                             }
                         }
 
-                        Toggle("归档任务", isOn: archivedBinding)
+                        Toggle("归档任务", isOn: $task.isArchived)
                             .toggleStyle(.switch)
+                            .onChange(of: task.isArchived) { _, _ in saveTaskChanges() }
 
                         Text("备注")
                             .font(.headline)
 
-                        TextEditor(text: notesBinding)
+                        TextEditor(text: $task.notes)
                             .frame(minHeight: 120)
                             .scrollContentBackground(.hidden)
                             .padding(12)
                             .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .onChange(of: task.notes) { _, _ in saveTaskChanges() }
 
                         HStack(spacing: 12) {
                             StatTile(
@@ -700,27 +742,6 @@ private struct TaskInspector: View {
         }
     }
 
-    private var titleBinding: Binding<String> {
-        Binding(
-            get: { task.title },
-            set: { task.title = $0; saveTaskChanges() }
-        )
-    }
-
-    private var notesBinding: Binding<String> {
-        Binding(
-            get: { task.notes },
-            set: { task.notes = $0; saveTaskChanges() }
-        )
-    }
-
-    private var archivedBinding: Binding<Bool> {
-        Binding(
-            get: { task.isArchived },
-            set: { task.isArchived = $0; saveTaskChanges() }
-        )
-    }
-
     private var projectBinding: Binding<UUID?> {
         Binding<UUID?>(
             get: { task.project?.id },
@@ -734,36 +755,39 @@ private struct TaskInspector: View {
     @ViewBuilder
     private var actionRow: some View {
         HStack(spacing: 12) {
-            if timerEngine.activeTask?.id == task.id, timerEngine.timerState.status == .running {
+            if timerEngine.isTaskRunning(task) {
                 ActionCapsuleButton(
-                    title: "暂停当前任务",
+                    title: "暂停此任务",
                     systemImage: "pause.fill",
                     tint: Color(hexString: PaletteColor.lemon.rawValue)
                 ) {
-                    timerEngine.pauseTimer()
+                    timerEngine.pause(task: task)
                 }
 
                 ActionCapsuleButton(
-                    title: "停止当前任务",
+                    title: "停止此任务",
                     systemImage: "stop.fill",
                     tint: Color(hexString: PaletteColor.coral.rawValue)
                 ) {
-                    timerEngine.stopTimer()
+                    timerEngine.stop(task: task)
                 }
             } else {
                 ActionCapsuleButton(
-                    title: timerEngine.activeTask?.id == task.id ? "继续计时" : "切换并开始",
+                    title: timerEngine.isTaskPaused(task) ? "恢复此任务" : "开始此任务",
                     systemImage: "play.fill",
                     tint: Color(hexString: PaletteColor.sky.rawValue)
                 ) {
-                    if timerEngine.activeTask?.id == task.id {
-                        try? timerEngine.startTimer()
-                    } else if timerEngine.timerState.status == .running {
-                        timerEngine.switchTask(to: task)
-                    } else {
-                        timerEngine.selectTask(task)
-                        try? timerEngine.startTimer()
-                    }
+                    timerEngine.start(task: task)
+                }
+            }
+
+            if timerEngine.primaryTask?.id != task.id,
+               timerEngine.isTaskRunning(task) || timerEngine.isTaskPaused(task)
+            {
+                Button {
+                    timerEngine.setPrimaryTask(task)
+                } label: {
+                    Label("设为主任务", systemImage: "star")
                 }
             }
 
@@ -945,16 +969,18 @@ private struct TimeEntryInspector: View {
                             .font(.system(.title2, design: .rounded, weight: .semibold))
 
                         if isRunningEntry {
-                            Text("进行中的记录不能直接编辑。请先停止当前计时，再回来修正时间。")
+                            Text("进行中的记录不能直接编辑。请先停止对应任务的计时，再回来修正时间。")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
 
                             ActionCapsuleButton(
-                                title: "停止当前计时",
+                                title: "停止此任务",
                                 systemImage: "stop.fill",
                                 tint: Color(hexString: PaletteColor.coral.rawValue)
                             ) {
-                                timerEngine.stopTimer()
+                                if let task = entry.task {
+                                    timerEngine.stop(task: task)
+                                }
                             }
                         } else {
                             Picker("所属任务", selection: taskBinding) {
