@@ -1,0 +1,422 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000101 /* MyWorkingHoursApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000201 /* MyWorkingHoursApp.swift */; };
+		100000000000000000000102 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000202 /* MenuBarContentView.swift */; };
+		100000000000000000000103 /* TimerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000203 /* TimerEngine.swift */; };
+		100000000000000000000104 /* NotchOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000204 /* NotchOverlayView.swift */; };
+		100000000000000000000105 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000205 /* Models.swift */; };
+		100000000000000000000106 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000206 /* MainWindowView.swift */; };
+		100000000000000000000107 /* QuickTaskSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000207 /* QuickTaskSwitcherView.swift */; };
+		100000000000000000000108 /* MainWindowRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000208 /* MainWindowRouter.swift */; };
+		100000000000000000000109 /* PersistenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000209 /* PersistenceStore.swift */; };
+		10000000000000000000010A /* Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020A /* Utilities.swift */; };
+		10000000000000000000010B /* TimeAggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020B /* TimeAggregationService.swift */; };
+		10000000000000000000010C /* NotchOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020C /* NotchOverlayController.swift */; };
+		10000000000000000000010D /* MyWorkingHoursAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020D /* MyWorkingHoursAppTests.swift */; };
+		10000000000000000000010E /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020E /* XCTest.framework */; };
+		10000000000000000000010F /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000211 /* AppIcon.icns */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		100000000000000000000012 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000009;
+			remoteInfo = MyWorkingHoursApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		10000000000000000000000B /* MyWorkingHours.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyWorkingHours.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		10000000000000000000000C /* MyWorkingHoursAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyWorkingHoursAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000201 /* MyWorkingHoursApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyWorkingHoursApp.swift; sourceTree = "<group>"; };
+		100000000000000000000202 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
+		100000000000000000000203 /* TimerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerEngine.swift; sourceTree = "<group>"; };
+		100000000000000000000204 /* NotchOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayView.swift; sourceTree = "<group>"; };
+		100000000000000000000205 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		100000000000000000000206 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		100000000000000000000207 /* QuickTaskSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickTaskSwitcherView.swift; sourceTree = "<group>"; };
+		100000000000000000000208 /* MainWindowRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowRouter.swift; sourceTree = "<group>"; };
+		100000000000000000000209 /* PersistenceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStore.swift; sourceTree = "<group>"; };
+		10000000000000000000020A /* Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utilities.swift; sourceTree = "<group>"; };
+		10000000000000000000020B /* TimeAggregationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeAggregationService.swift; sourceTree = "<group>"; };
+		10000000000000000000020C /* NotchOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayController.swift; sourceTree = "<group>"; };
+		10000000000000000000020D /* MyWorkingHoursAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyWorkingHoursAppTests.swift; sourceTree = "<group>"; };
+		10000000000000000000020E /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+		10000000000000000000020F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000210 /* build_app.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = build_app.sh; sourceTree = "<group>"; };
+		100000000000000000000211 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		10000000000000000000000E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10000000000000000000010E /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000005 /* Sources */,
+				100000000000000000000006 /* Tests */,
+				100000000000000000000007 /* Packaging */,
+				100000000000000000000008 /* scripts */,
+				100000000000000000000014 /* Resources */,
+				100000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000B /* MyWorkingHours.app */,
+				10000000000000000000000C /* MyWorkingHoursAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		100000000000000000000005 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000201 /* MyWorkingHoursApp.swift */,
+				100000000000000000000202 /* MenuBarContentView.swift */,
+				100000000000000000000203 /* TimerEngine.swift */,
+				100000000000000000000204 /* NotchOverlayView.swift */,
+				100000000000000000000205 /* Models.swift */,
+				100000000000000000000206 /* MainWindowView.swift */,
+				100000000000000000000207 /* QuickTaskSwitcherView.swift */,
+				100000000000000000000208 /* MainWindowRouter.swift */,
+				100000000000000000000209 /* PersistenceStore.swift */,
+				10000000000000000000020A /* Utilities.swift */,
+				10000000000000000000020B /* TimeAggregationService.swift */,
+				10000000000000000000020C /* NotchOverlayController.swift */,
+			);
+			path = Sources/MyWorkingHoursApp;
+			sourceTree = SOURCE_ROOT;
+		};
+		100000000000000000000006 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000020D /* MyWorkingHoursAppTests.swift */,
+			);
+			path = Tests/MyWorkingHoursAppTests;
+			sourceTree = SOURCE_ROOT;
+		};
+		100000000000000000000007 /* Packaging */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000020F /* Info.plist */,
+			);
+			path = Packaging;
+			sourceTree = SOURCE_ROOT;
+		};
+		100000000000000000000008 /* scripts */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000210 /* build_app.sh */,
+			);
+			path = scripts;
+			sourceTree = SOURCE_ROOT;
+		};
+		100000000000000000000014 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000211 /* AppIcon.icns */,
+			);
+			path = Resources;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000009 /* MyWorkingHoursApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 200000000000000000000006 /* Build configuration list for PBXNativeTarget "MyWorkingHoursApp" */;
+			buildPhases = (
+				10000000000000000000000D /* Sources */,
+				10000000000000000000000E /* Frameworks */,
+				10000000000000000000000F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MyWorkingHoursApp;
+			productName = MyWorkingHours;
+			productReference = 10000000000000000000000B /* MyWorkingHours.app */;
+			productType = "com.apple.product-type.application";
+		};
+		10000000000000000000000A /* MyWorkingHoursAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 200000000000000000000009 /* Build configuration list for PBXNativeTarget "MyWorkingHoursAppTests" */;
+			buildPhases = (
+				100000000000000000000010 /* Sources */,
+				100000000000000000000011 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000013 /* PBXTargetDependency */,
+			);
+			name = MyWorkingHoursAppTests;
+			productName = MyWorkingHoursAppTests;
+			productReference = 10000000000000000000000C /* MyWorkingHoursAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2640;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					100000000000000000000009 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					10000000000000000000000A = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 100000000000000000000009;
+					};
+				};
+			};
+			buildConfigurationList = 200000000000000000000003 /* Build configuration list for PBXProject "MyWorkingHours" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000002;
+			productRefGroup = 100000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000009 /* MyWorkingHoursApp */,
+				10000000000000000000000A /* MyWorkingHoursAppTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		10000000000000000000000F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10000000000000000000010F /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		10000000000000000000000D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000101 /* MyWorkingHoursApp.swift in Sources */,
+				100000000000000000000102 /* MenuBarContentView.swift in Sources */,
+				100000000000000000000103 /* TimerEngine.swift in Sources */,
+				100000000000000000000104 /* NotchOverlayView.swift in Sources */,
+				100000000000000000000105 /* Models.swift in Sources */,
+				100000000000000000000106 /* MainWindowView.swift in Sources */,
+				100000000000000000000107 /* QuickTaskSwitcherView.swift in Sources */,
+				100000000000000000000108 /* MainWindowRouter.swift in Sources */,
+				100000000000000000000109 /* PersistenceStore.swift in Sources */,
+				10000000000000000000010A /* Utilities.swift in Sources */,
+				10000000000000000000010B /* TimeAggregationService.swift in Sources */,
+				10000000000000000000010C /* NotchOverlayController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10000000000000000000010D /* MyWorkingHoursAppTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		100000000000000000000013 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000009 /* MyWorkingHoursApp */;
+			targetProxy = 100000000000000000000012 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		200000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		200000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		200000000000000000000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Packaging/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hbymrito.MyWorkingHours;
+				PRODUCT_MODULE_NAME = MyWorkingHoursApp;
+				PRODUCT_NAME = MyWorkingHours;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		200000000000000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Packaging/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hbymrito.MyWorkingHours;
+				PRODUCT_MODULE_NAME = MyWorkingHoursApp;
+				PRODUCT_NAME = MyWorkingHours;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		200000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hbymrito.MyWorkingHoursAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyWorkingHours.app/Contents/MacOS/MyWorkingHours";
+			};
+			name = Debug;
+		};
+		200000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hbymrito.MyWorkingHoursAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyWorkingHours.app/Contents/MacOS/MyWorkingHours";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		200000000000000000000003 /* Build configuration list for PBXProject "MyWorkingHours" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				200000000000000000000001 /* Debug */,
+				200000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		200000000000000000000006 /* Build configuration list for PBXNativeTarget "MyWorkingHoursApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				200000000000000000000004 /* Debug */,
+				200000000000000000000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		200000000000000000000009 /* Build configuration list for PBXNativeTarget "MyWorkingHoursAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				200000000000000000000007 /* Debug */,
+				200000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 100000000000000000000001 /* Project object */;
+}

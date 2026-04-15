@@ -16,6 +16,7 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 INFO_PLIST_TEMPLATE="$ROOT_DIR/Packaging/Info.plist"
+ICON_FILE="$ROOT_DIR/Resources/AppIcon.icns"
 
 echo "Building $PRODUCT_NAME ($CONFIGURATION)..."
 swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME"
@@ -33,6 +34,10 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 
 cp "$EXECUTABLE_PATH" "$MACOS_DIR/$PRODUCT_NAME"
 cp "$INFO_PLIST_TEMPLATE" "$CONTENTS_DIR/Info.plist"
+
+if [[ -f "$ICON_FILE" ]]; then
+  cp "$ICON_FILE" "$RESOURCES_DIR/AppIcon.icns"
+fi
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VERSION" "$CONTENTS_DIR/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS_DIR/Info.plist"

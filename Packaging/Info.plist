@@ -8,6 +8,8 @@
     <string>MyWorkingHours</string>
     <key>CFBundleExecutable</key>
     <string>MyWorkingHours</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.hbymrito.MyWorkingHours</string>
     <key>CFBundleInfoDictionaryVersion</key>
