@@ -4,6 +4,7 @@ import SwiftUI
 
 enum MainWindowDestination: Equatable {
     case today
+    case overview
     case tasks(UUID?)
     case projects(UUID?)
     case tags(UUID?)
@@ -15,7 +16,7 @@ final class MainWindowRouter: NSObject, ObservableObject {
     @Published var destination: MainWindowDestination = .today
 
     private var contentBuilder: (() -> AnyView)?
-    private weak var window: NSWindow?
+    private var window: NSWindow?
 
     func installContentBuilder(_ builder: @escaping () -> AnyView) {
         contentBuilder = builder

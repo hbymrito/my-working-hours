@@ -2,8 +2,17 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    var onReopen: (() -> Void)?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            onReopen?()
+        }
+        return true
     }
 }
 
@@ -57,6 +66,10 @@ struct MyWorkingHoursApp: App {
         }
 
         _services = StateObject(wrappedValue: services)
+
+        appDelegate.onReopen = { [weak router] in
+            router?.open()
+        }
 
         DispatchQueue.main.async {
             services.start()
