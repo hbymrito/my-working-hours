@@ -3,6 +3,7 @@ import SwiftUI
 
 private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     case today
+    case overview
     case tasks
     case projects
     case tags
@@ -13,6 +14,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .today: "今天"
+        case .overview: "总览"
         case .tasks: "所有任务"
         case .projects: "项目"
         case .tags: "标签"
@@ -23,6 +25,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     var systemImage: String {
         switch self {
         case .today: "clock.badge.checkmark"
+        case .overview: "chart.bar.xaxis"
         case .tasks: "checklist"
         case .projects: "square.grid.2x2"
         case .tags: "tag"
@@ -51,15 +54,61 @@ struct MainWindowView: View {
     @State private var recordProjectID: UUID?
     @State private var recordTagID: UUID?
     @State private var recordTaskID: UUID?
+    @State private var todayViewDate = Date()
+    @State private var overviewPeriod: OverviewPeriod = .today
+    @State private var overviewCustomStart: Date = Calendar.autoupdatingCurrent.date(byAdding: .day, value: -6, to: Date()) ?? Date()
+    @State private var overviewCustomEnd: Date = Date()
 
     private var todaySummaries: [TaskSummary] {
-        timerEngine.aggregationService.groupedDurations(on: timerEngine.now, entries: entries, now: timerEngine.now)
+        timerEngine.aggregationService.groupedDurations(on: todayViewDate, entries: entries, now: timerEngine.now)
             .sorted { a, b in
                 let aOrder = taskSortOrder(a.task)
                 let bOrder = taskSortOrder(b.task)
                 if aOrder != bOrder { return aOrder < bOrder }
                 return a.duration > b.duration
             }
+    }
+
+    private var isViewingToday: Bool {
+        Calendar.autoupdatingCurrent.isDate(todayViewDate, inSameDayAs: timerEngine.now)
+    }
+
+    private var todayViewTotalDuration: TimeInterval {
+        timerEngine.aggregationService.totalDuration(on: todayViewDate, entries: entries, now: timerEngine.now)
+    }
+
+    private var todayViewWallClockDuration: TimeInterval {
+        let interval = timerEngine.aggregationService.dayInterval(for: todayViewDate)
+        return timerEngine.aggregationService.wallClockDuration(in: interval, entries: entries, now: timerEngine.now)
+    }
+
+    private var todayViewDateBinding: Binding<Date> {
+        Binding(
+            get: { todayViewDate },
+            set: { newValue in
+                if selectedTaskID != nil {
+                    selectedTaskID = nil
+                }
+                todayViewDate = newValue
+            }
+        )
+    }
+
+    /// Selection binding for the today List. The getter filters out any id that isn't
+    /// present in todaySummaries so the List's NSTableView never sees a stale selection
+    /// tag after the date changes — which otherwise would trigger a reentrant delegate
+    /// call when the table reloads with mismatching selection + data.
+    private var todaySelectedTaskBinding: Binding<UUID?> {
+        Binding(
+            get: {
+                guard let id = selectedTaskID,
+                      todaySummaries.contains(where: { $0.task.id == id }) else {
+                    return nil
+                }
+                return id
+            },
+            set: { selectedTaskID = $0 }
+        )
     }
 
     /// Running = 0, Paused = 1, Stopped = 2 — for sorting active tasks first.
@@ -74,7 +123,7 @@ struct MainWindowView: View {
     }
 
     private var todayEntries: [TimeEntry] {
-        let interval = timerEngine.aggregationService.dayInterval(for: timerEngine.now)
+        let interval = timerEngine.aggregationService.dayInterval(for: todayViewDate)
         return entries.filter {
             timerEngine.aggregationService.overlapDuration(of: $0, within: interval, now: timerEngine.now) > 0
         }
@@ -133,6 +182,7 @@ struct MainWindowView: View {
         } content: {
             contentColumn
                 .navigationTitle(activeSection.title)
+                .navigationSplitViewColumnWidth(min: 360, ideal: 420)
         } detail: {
             detailColumn
         }
@@ -143,6 +193,33 @@ struct MainWindowView: View {
         .onChange(of: mainWindowRouter.destination, initial: true) { _, destination in
             apply(destination)
         }
+        .onChange(of: selectedSection) { _, newSection in
+            guard let newSection else { return }
+            // Skip clearing when the change originated from a router navigation — the router
+            // destination already matches the new section, so the ids were set intentionally.
+            if sectionFor(mainWindowRouter.destination) == newSection {
+                return
+            }
+            // Defer to the next run loop so we don't mutate another List's selection binding
+            // while the sidebar's NSTableView delegate is still processing this click.
+            DispatchQueue.main.async {
+                selectedTaskID = nil
+                selectedProjectID = nil
+                selectedTagID = nil
+                selectedEntryID = nil
+            }
+        }
+    }
+
+    private func sectionFor(_ destination: MainWindowDestination) -> SidebarSection {
+        switch destination {
+        case .today: return .today
+        case .overview: return .overview
+        case .tasks: return .tasks
+        case .projects: return .projects
+        case .tags: return .tags
+        case .records: return .records
+        }
     }
 
     @ViewBuilder
@@ -150,6 +227,8 @@ struct MainWindowView: View {
         switch activeSection {
         case .today:
             todayContent
+        case .overview:
+            overviewContent
         case .tasks:
             searchableList(title: "搜索任务", text: $searchText) {
                 List(filteredTasks, id: \.id, selection: $selectedTaskID) { task in
@@ -188,13 +267,37 @@ struct MainWindowView: View {
                     tags: tags,
                     timerEngine: timerEngine,
                     modelContext: modelContext,
-                    onDelete: { deleteTask(selectedTask) }
+                    onDelete: { deleteTask(selectedTask) },
+                    onClose: { DispatchQueue.main.async { selectedTaskID = nil } }
                 )
             } else {
                 TodayOverview(
+                    date: todayViewDate,
+                    isToday: isViewingToday,
+                    totalDuration: todayViewTotalDuration,
+                    wallClockDuration: todayViewWallClockDuration,
                     summaries: todaySummaries,
                     entries: todayEntries,
                     timerEngine: timerEngine
+                )
+            }
+        case .overview:
+            if let selectedTask = tasks.first(where: { $0.id == selectedTaskID }) {
+                TaskInspector(
+                    task: selectedTask,
+                    entries: entries,
+                    projects: projects,
+                    tags: tags,
+                    timerEngine: timerEngine,
+                    modelContext: modelContext,
+                    onDelete: { deleteTask(selectedTask) },
+                    onClose: { DispatchQueue.main.async { selectedTaskID = nil } }
+                )
+            } else {
+                EmptyStateView(
+                    title: "选择一个任务",
+                    message: "在左侧任务细分里选中任务，可以在这里查看它的详情。",
+                    systemImage: "chart.bar.xaxis"
                 )
             }
         case .tasks:
@@ -206,7 +309,8 @@ struct MainWindowView: View {
                     tags: tags,
                     timerEngine: timerEngine,
                     modelContext: modelContext,
-                    onDelete: { deleteTask(selectedTask) }
+                    onDelete: { deleteTask(selectedTask) },
+                    onClose: { DispatchQueue.main.async { selectedTaskID = nil } }
                 )
             } else {
                 EmptyStateView(
@@ -255,12 +359,36 @@ struct MainWindowView: View {
     }
 
     private var todayContent: some View {
-        List(selection: $selectedTaskID) {
-            Section("今日任务") {
-                ForEach(todaySummaries) { summary in
-                    Button {
-                        selectedTaskID = summary.task.id
-                    } label: {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                DatePicker("日期", selection: todayViewDateBinding, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+
+                if !isViewingToday {
+                    Button("回到今天") {
+                        selectedTaskID = nil
+                        todayViewDate = Date()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            List(selection: todaySelectedTaskBinding) {
+                Section(isViewingToday ? "今日任务" : "\(todayViewDate.shortDateText()) 的任务") {
+                    if todaySummaries.isEmpty {
+                        Text("这一天没有计时记录")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(todaySummaries) { summary in
                         HStack {
                             TaskRow(task: summary.task, timerEngine: timerEngine)
                             Spacer()
@@ -268,30 +396,62 @@ struct MainWindowView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
+                        .tag(summary.task.id)
                     }
-                    .buttonStyle(.plain)
-                    .tag(summary.task.id)
                 }
-            }
 
-            Section("最近记录") {
-                ForEach(todayEntries.prefix(8), id: \.id) { entry in
-                    Button {
-                        selectedTaskID = entry.task?.id
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(entry.task?.title ?? "未分配任务")
-                                .font(.body.weight(.medium))
-                            Text(formattedTimeRange(start: entry.startAt, end: entry.endAt))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                Section(isViewingToday ? "最近记录" : "当日记录") {
+                    ForEach(todayEntries.prefix(12), id: \.id) { entry in
+                        Button {
+                            let taskID = entry.task?.id
+                            DispatchQueue.main.async {
+                                selectedTaskID = taskID
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.task?.title ?? "未分配任务")
+                                    .font(.body.weight(.medium))
+                                Text(formattedTimeRange(start: entry.startAt, end: entry.endAt))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            // Force SwiftUI to treat each day's List as a distinct view identity, so switching
+            // dates rebuilds a fresh NSTableView instead of reloading the existing one mid-render.
+            // This sidesteps the reentrant delegate warning triggered when the underlying
+            // NSTableView tries to reconcile selection + data changes in the same pass.
+            .id(Calendar.autoupdatingCurrent.startOfDay(for: todayViewDate))
         }
+    }
+
+    private var overviewInterval: DateInterval {
+        switch overviewPeriod {
+        case .today:
+            return timerEngine.aggregationService.dayInterval(for: timerEngine.now)
+        case .week:
+            return timerEngine.aggregationService.weekInterval(for: timerEngine.now)
+        case .month:
+            return timerEngine.aggregationService.monthInterval(for: timerEngine.now)
+        case .custom:
+            return timerEngine.aggregationService.customInterval(from: overviewCustomStart, to: overviewCustomEnd)
+        }
+    }
+
+    private var overviewContent: some View {
+        OverviewContentView(
+            period: $overviewPeriod,
+            customStart: $overviewCustomStart,
+            customEnd: $overviewCustomEnd,
+            interval: overviewInterval,
+            entries: entries,
+            timerEngine: timerEngine,
+            selectedTaskID: $selectedTaskID
+        )
     }
 
     private var recordsContent: some View {
@@ -342,17 +502,18 @@ struct MainWindowView: View {
                     let task = WorkTask(title: "新任务", updatedAt: Date())
                     modelContext.insert(task)
                     persist()
-                    selectedSection = .tasks
-                    selectedTaskID = task.id
+                    mainWindowRouter.destination = .tasks(task.id)
                 } label: {
                     Label("新建任务", systemImage: "plus")
                 }
+            case .overview:
+                EmptyView()
             case .projects:
                 Button {
                     let project = Project()
                     modelContext.insert(project)
                     persist()
-                    selectedProjectID = project.id
+                    mainWindowRouter.destination = .projects(project.id)
                 } label: {
                     Label("新建项目", systemImage: "plus")
                 }
@@ -361,7 +522,7 @@ struct MainWindowView: View {
                     let tag = Tag()
                     modelContext.insert(tag)
                     persist()
-                    selectedTagID = tag.id
+                    mainWindowRouter.destination = .tags(tag.id)
                 } label: {
                     Label("新建标签", systemImage: "plus")
                 }
@@ -373,7 +534,7 @@ struct MainWindowView: View {
                     let entry = TimeEntry(task: targetTask, startAt: startDate, endAt: endDate, source: .manual, createdAt: Date())
                     modelContext.insert(entry)
                     persist()
-                    selectedEntryID = entry.id
+                    mainWindowRouter.destination = .records(entry.id)
                 } label: {
                     Label("新增记录", systemImage: "plus")
                 }
@@ -385,6 +546,8 @@ struct MainWindowView: View {
         switch destination {
         case .today:
             selectedSection = .today
+        case .overview:
+            selectedSection = .overview
         case .tasks(let taskID):
             selectedSection = .tasks
             selectedTaskID = taskID
@@ -416,11 +579,11 @@ struct MainWindowView: View {
             timerEngine.stop(task: task)
         }
 
-        if selectedTaskID == taskID {
-            selectedTaskID = nil
-        }
-
         DispatchQueue.main.async {
+            if selectedTaskID == taskID {
+                selectedTaskID = nil
+            }
+
             let relatedEntries = entries.filter { $0.task?.id == taskID }
             relatedEntries.forEach(modelContext.delete)
 
@@ -435,16 +598,16 @@ struct MainWindowView: View {
     private func deleteEntry(_ entry: TimeEntry) {
         let entryID = entry.id
 
-        if selectedEntryID == entryID {
-            selectedEntryID = nil
-        }
-
         // Only stop the task owning this entry, not the whole workbench
         if entry.endAt == nil, let task = entry.task {
             timerEngine.stop(task: task)
         }
 
         DispatchQueue.main.async {
+            if selectedEntryID == entryID {
+                selectedEntryID = nil
+            }
+
             guard let currentEntry = entries.first(where: { $0.id == entryID }) else {
                 return
             }
@@ -559,9 +722,25 @@ private struct TimeEntryRow: View {
 }
 
 private struct TodayOverview: View {
+    let date: Date
+    let isToday: Bool
+    let totalDuration: TimeInterval
+    let wallClockDuration: TimeInterval
     let summaries: [TaskSummary]
     let entries: [TimeEntry]
     let timerEngine: TimerEngine
+
+    private var headerTitle: String {
+        isToday ? "今日总览" : "\(date.shortDateText()) 总览"
+    }
+
+    private var distributionTitle: String {
+        isToday ? "今日任务分布" : "当日任务分布"
+    }
+
+    private var recentTitle: String {
+        isToday ? "最近记录" : "当日记录"
+    }
 
     private var statusText: String {
         if timerEngine.runningCount > 0 {
@@ -577,40 +756,48 @@ private struct TodayOverview: View {
             VStack(alignment: .leading, spacing: 20) {
                 GlassPanel(cornerRadius: 28) {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("今日总览")
+                        Text(headerTitle)
                             .font(.title2.weight(.semibold))
 
                         HStack(spacing: 16) {
                             StatTile(
                                 title: "累计工时",
-                                value: DurationTextFormatter.compact(timerEngine.todayTotalDuration),
+                                value: DurationTextFormatter.compact(totalDuration),
                                 systemImage: "calendar.badge.clock",
                                 accent: Color(hexString: PaletteColor.lemon.rawValue)
                             )
 
                             StatTile(
                                 title: "实际经过",
-                                value: DurationTextFormatter.compact(timerEngine.todayWallClockDuration),
+                                value: DurationTextFormatter.compact(wallClockDuration),
                                 systemImage: "clock.fill",
                                 accent: Color(hexString: PaletteColor.sky.rawValue)
                             )
                         }
 
-                        HStack(spacing: 16) {
-                            StatTile(
-                                title: "当前状态",
-                                value: statusText,
-                                systemImage: timerEngine.timerState.status.symbolName,
-                                accent: timerEngine.timerState.status.tint
-                            )
+                        if isToday {
+                            HStack(spacing: 16) {
+                                StatTile(
+                                    title: "当前状态",
+                                    value: statusText,
+                                    systemImage: timerEngine.timerState.status.symbolName,
+                                    accent: timerEngine.timerState.status.tint
+                                )
+                            }
                         }
                     }
                     .padding(24)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("今日任务分布")
+                    Text(distributionTitle)
                         .font(.headline)
+
+                    if summaries.isEmpty {
+                        Text("这一天没有计时记录")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
 
                     ForEach(summaries) { summary in
                         HStack {
@@ -624,7 +811,7 @@ private struct TodayOverview: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("最近记录")
+                    Text(recentTitle)
                         .font(.headline)
 
                     ForEach(entries.prefix(10), id: \.id) { entry in
@@ -646,6 +833,7 @@ private struct TaskInspector: View {
     let timerEngine: TimerEngine
     let modelContext: ModelContext
     let onDelete: () -> Void
+    let onClose: () -> Void
 
     private var taskEntries: [TimeEntry] {
         entries.filter { $0.task?.id == task.id }
@@ -656,6 +844,19 @@ private struct TaskInspector: View {
             VStack(alignment: .leading, spacing: 20) {
                 GlassPanel(cornerRadius: 28) {
                     VStack(alignment: .leading, spacing: 18) {
+                        HStack {
+                            Spacer()
+                            Button {
+                                onClose()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("关闭详情")
+                        }
+
                         TextField("任务名称", text: $task.title)
                             .font(.system(.title2, design: .rounded, weight: .semibold))
                             .textFieldStyle(.plain)
@@ -1079,5 +1280,203 @@ private struct SearchableList<Content: View>: View {
 private extension View {
     func searchableList(title: String, text: Binding<String>, @ViewBuilder content: () -> some View) -> some View {
         SearchableList(title: title, text: text, content: content)
+    }
+}
+
+private struct OverviewContentView: View {
+    @Binding var period: OverviewPeriod
+    @Binding var customStart: Date
+    @Binding var customEnd: Date
+    let interval: DateInterval
+    let entries: [TimeEntry]
+    let timerEngine: TimerEngine
+    @Binding var selectedTaskID: UUID?
+
+    private var totalDuration: TimeInterval {
+        timerEngine.aggregationService.totalDuration(in: interval, entries: entries, now: timerEngine.now)
+    }
+
+    private var wallClockDuration: TimeInterval {
+        timerEngine.aggregationService.wallClockDuration(in: interval, entries: entries, now: timerEngine.now)
+    }
+
+    private var taskSummaries: [TaskSummary] {
+        timerEngine.aggregationService.groupedDurations(in: interval, entries: entries, now: timerEngine.now)
+    }
+
+    private var projectSummaries: [ProjectSummary] {
+        timerEngine.aggregationService.groupedByProject(in: interval, entries: entries, now: timerEngine.now)
+    }
+
+    private var tagSummaries: [TagSummary] {
+        timerEngine.aggregationService.groupedByTag(in: interval, entries: entries, now: timerEngine.now)
+    }
+
+    private var rangeTitle: String {
+        switch period {
+        case .today: return "今日总览"
+        case .week: return "本周总览"
+        case .month: return "本月总览"
+        case .custom:
+            let start = interval.start.shortDateText()
+            let end = Calendar.autoupdatingCurrent.date(byAdding: .second, value: -1, to: interval.end) ?? interval.end
+            if Calendar.autoupdatingCurrent.isDate(interval.start, inSameDayAs: end) {
+                return "\(start) 总览"
+            }
+            return "\(start) - \(end.shortDateText()) 总览"
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                periodControls
+
+                GlassPanel(cornerRadius: 28) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(rangeTitle)
+                            .font(.title2.weight(.semibold))
+
+                        HStack(spacing: 16) {
+                            StatTile(
+                                title: "累计工时",
+                                value: DurationTextFormatter.compact(totalDuration),
+                                systemImage: "calendar.badge.clock",
+                                accent: Color(hexString: PaletteColor.lemon.rawValue)
+                            )
+
+                            StatTile(
+                                title: "实际经过",
+                                value: DurationTextFormatter.compact(wallClockDuration),
+                                systemImage: "clock.fill",
+                                accent: Color(hexString: PaletteColor.sky.rawValue)
+                            )
+                        }
+                    }
+                    .padding(24)
+                }
+
+                breakdownSection(title: "任务细分", emptyHint: "这段时间没有任务记录") {
+                    if taskSummaries.isEmpty {
+                        emptyRow("这段时间没有任务记录")
+                    } else {
+                        ForEach(taskSummaries) { summary in
+                            Button {
+                                let id = summary.task.id
+                                DispatchQueue.main.async {
+                                    selectedTaskID = id
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Circle()
+                                        .fill(Color(hexString: summary.task.project?.colorHex ?? PaletteColor.sky.rawValue))
+                                        .frame(width: 10, height: 10)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(summary.task.title)
+                                            .font(.body.weight(.medium))
+                                        Text(summary.task.project?.name ?? "未分配项目")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    Text(DurationTextFormatter.compact(summary.duration))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                breakdownSection(title: "项目细分", emptyHint: "没有项目维度的记录") {
+                    if projectSummaries.isEmpty {
+                        emptyRow("没有项目维度的记录")
+                    } else {
+                        ForEach(projectSummaries) { summary in
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(Color(hexString: summary.colorHex))
+                                    .frame(width: 10, height: 10)
+
+                                Text(summary.displayName)
+                                    .font(.body.weight(.medium))
+
+                                Spacer()
+
+                                Text(DurationTextFormatter.compact(summary.duration))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                }
+
+                breakdownSection(title: "标签细分", emptyHint: "没有标签维度的记录") {
+                    if tagSummaries.isEmpty {
+                        emptyRow("没有标签维度的记录")
+                    } else {
+                        ForEach(tagSummaries) { summary in
+                            HStack(spacing: 12) {
+                                TagPill(tag: summary.tag)
+
+                                Spacer()
+
+                                Text(DurationTextFormatter.compact(summary.duration))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 6)
+                        }
+                    }
+                }
+            }
+            .padding(24)
+        }
+    }
+
+    private var periodControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("时间范围", selection: $period) {
+                ForEach(OverviewPeriod.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if period == .custom {
+                HStack(spacing: 12) {
+                    DatePicker("开始", selection: $customStart, in: ...customEnd, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+
+                    DatePicker("结束", selection: $customEnd, in: customStart..., displayedComponents: .date)
+                        .datePickerStyle(.compact)
+
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func breakdownSection<Inner: View>(title: String, emptyHint: String, @ViewBuilder content: () -> Inner) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            content()
+        }
+    }
+
+    private func emptyRow(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 6)
     }
 }

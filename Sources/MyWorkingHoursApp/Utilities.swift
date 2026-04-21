@@ -35,6 +35,40 @@ struct TaskSummary: Identifiable {
     var id: UUID { task.id }
 }
 
+struct ProjectSummary: Identifiable {
+    let project: Project?
+    let duration: TimeInterval
+
+    var id: String { project?.id.uuidString ?? "unassigned" }
+    var displayName: String { project?.name ?? "无项目" }
+    var colorHex: String { project?.colorHex ?? PaletteColor.slate.rawValue }
+}
+
+struct TagSummary: Identifiable {
+    let tag: Tag
+    let duration: TimeInterval
+
+    var id: UUID { tag.id }
+}
+
+enum OverviewPeriod: String, CaseIterable, Identifiable, Hashable {
+    case today
+    case week
+    case month
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .today: "今日"
+        case .week: "本周"
+        case .month: "本月"
+        case .custom: "自定义"
+        }
+    }
+}
+
 enum DurationTextFormatter {
     private static let clockFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
