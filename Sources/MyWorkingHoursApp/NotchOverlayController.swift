@@ -3,20 +3,11 @@ import SwiftUI
 
 @MainActor
 final class NotchOverlayController: NSObject, ObservableObject {
-    enum PresentationMode {
-        case hidden
-        case peek
-        case pinned
-    }
-
-    enum ChromeStyle {
-        case notch
-        case menuBar
-    }
+    typealias PresentationMode = NotchOverlayPresentationMode
 
     @Published private(set) var mode: PresentationMode = .hidden
     @Published var isTaskSwitcherPresented = false
-    @Published private(set) var chromeStyle: ChromeStyle = .menuBar
+    @Published private(set) var chromeStyle: NotchOverlayChromeStyle = .physicalNotch
 
     private let timerEngine: TimerEngine
     private let mainWindowRouter: MainWindowRouter
@@ -123,10 +114,10 @@ final class NotchOverlayController: NSObject, ObservableObject {
         guard let screen = targetScreen() else {
             return
         }
-        let anchorRect = screen.topCenterAnchorRect
-        chromeStyle = screen.notchRect == nil ? .menuBar : .notch
+        let geometry = screen.notchOverlayGeometry
+        chromeStyle = geometry.chromeStyle
 
-        let hitPanel = HitTargetPanel(contentRect: hitTargetFrame(for: anchorRect), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let hitPanel = HitTargetPanel(contentRect: geometry.hitTargetFrame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         hitPanel.backgroundColor = .clear
         hitPanel.isOpaque = false
         hitPanel.level = .statusBar
@@ -156,7 +147,7 @@ final class NotchOverlayController: NSObject, ObservableObject {
         hitPanel.orderFrontRegardless()
         self.hitPanel = hitPanel
 
-        let overlayPanel = OverlayFloatingPanel(contentRect: hiddenOverlayFrame(for: anchorRect), styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
+        let overlayPanel = OverlayFloatingPanel(contentRect: geometry.hiddenOverlayFrame(), styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
         overlayPanel.backgroundColor = .clear
         overlayPanel.isOpaque = false
         overlayPanel.hasShadow = false
@@ -184,13 +175,13 @@ final class NotchOverlayController: NSObject, ObservableObject {
         else {
             return
         }
-        let anchorRect = screen.topCenterAnchorRect
-        chromeStyle = screen.notchRect == nil ? .menuBar : .notch
+        let geometry = screen.notchOverlayGeometry
+        chromeStyle = geometry.chromeStyle
 
-        hitPanel.setFrame(hitTargetFrame(for: anchorRect), display: true)
+        hitPanel.setFrame(geometry.hitTargetFrame, display: true)
 
-        let visibleFrame = overlayFrame(for: anchorRect, mode: mode == .hidden ? .peek : mode)
-        let collapsedFrame = hiddenOverlayFrame(for: anchorRect)
+        let visibleFrame = geometry.overlayFrame(for: mode == .hidden ? .peek : mode)
+        let collapsedFrame = geometry.hiddenOverlayFrame()
 
         switch mode {
         case .hidden:
@@ -274,59 +265,6 @@ final class NotchOverlayController: NSObject, ObservableObject {
         }
 
         return NSScreen.screens.first
-    }
-
-    private func hitTargetFrame(for anchorRect: NSRect) -> NSRect {
-        let width = max(anchorRect.width + 140, 280)
-        let height = max(anchorRect.height + 10, 34)
-
-        return NSRect(
-            x: anchorRect.midX - (width / 2),
-            y: anchorRect.minY - 4,
-            width: width,
-            height: height
-        )
-    }
-
-    private func hiddenOverlayFrame(for anchorRect: NSRect) -> NSRect {
-        let width: CGFloat = 260
-        let height: CGFloat = 40
-        let verticalInset: CGFloat = anchorRect.width < 200 ? 8 : 30
-
-        return NSRect(
-            x: anchorRect.midX - (width / 2),
-            y: anchorRect.minY - height + verticalInset,
-            width: width,
-            height: height
-        )
-    }
-
-    private func overlayFrame(for anchorRect: NSRect, mode: PresentationMode) -> NSRect {
-        let width: CGFloat
-        let height: CGFloat
-        let verticalInset: CGFloat
-
-        switch mode {
-        case .hidden:
-            width = 260
-            height = 40
-            verticalInset = anchorRect.width < 200 ? 8 : 30
-        case .peek:
-            width = 520
-            height = 68
-            verticalInset = anchorRect.width < 200 ? 6 : 34
-        case .pinned:
-            width = 520
-            height = 68
-            verticalInset = anchorRect.width < 200 ? 6 : 34
-        }
-
-        return NSRect(
-            x: anchorRect.midX - (width / 2),
-            y: anchorRect.minY - height + verticalInset,
-            width: width,
-            height: height
-        )
     }
 }
 
