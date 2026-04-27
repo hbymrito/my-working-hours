@@ -161,42 +161,16 @@ func formattedTimeRange(start: Date, end: Date?) -> String {
 
 extension NSScreen {
     var notchRect: NSRect? {
-        guard let auxiliaryTopLeftArea, let auxiliaryTopRightArea else {
+        let metrics = notchMetrics
+        guard metrics.hasPhysicalNotch else {
             return nil
         }
 
-        guard !auxiliaryTopLeftArea.isEmpty, !auxiliaryTopRightArea.isEmpty else {
-            return nil
-        }
-
-        let notchMinX = auxiliaryTopLeftArea.maxX
-        let notchMaxX = auxiliaryTopRightArea.minX
-        let notchWidth = notchMaxX - notchMinX
-
-        guard notchWidth > 0 else {
-            return nil
-        }
-
-        let notchY = min(auxiliaryTopLeftArea.minY, auxiliaryTopRightArea.minY)
-        let notchHeight = max(auxiliaryTopLeftArea.height, auxiliaryTopRightArea.height)
-
-        return NSRect(x: notchMinX, y: notchY, width: notchWidth, height: notchHeight)
+        return notchOverlayGeometry.anchorRect
     }
 
     var topCenterAnchorRect: NSRect {
-        if let notchRect {
-            return notchRect
-        }
-
-        let menuBarHeight = max(28, frame.maxY - visibleFrame.maxY)
-        let width: CGFloat = 180
-
-        return NSRect(
-            x: frame.midX - (width / 2),
-            y: frame.maxY - menuBarHeight,
-            width: width,
-            height: menuBarHeight
-        )
+        notchOverlayGeometry.anchorRect
     }
 
     static func screen(containing point: NSPoint) -> NSScreen? {

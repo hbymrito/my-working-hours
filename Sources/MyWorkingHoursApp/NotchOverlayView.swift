@@ -9,6 +9,66 @@ struct NotchOverlayView: View {
         520
     }
 
+    private var overlayHeight: CGFloat {
+        isSimulatedNotch ? 32 : 68
+    }
+
+    private var contentTopInset: CGFloat {
+        isSimulatedNotch ? 1 : 0
+    }
+
+    private var contentBottomInset: CGFloat {
+        isSimulatedNotch ? 0 : 4
+    }
+
+    private var contentHeight: CGFloat {
+        28
+    }
+
+    private var contentWidth: CGFloat {
+        isSimulatedNotch ? 480 : 420
+    }
+
+    private var itemSpacing: CGFloat {
+        5
+    }
+
+    private var titleRegionWidth: CGFloat? {
+        isSimulatedNotch ? 286 : 226
+    }
+
+    private var titleFontSize: CGFloat {
+        11
+    }
+
+    private var clockFontSize: CGFloat {
+        15
+    }
+
+    private var buttonSize: CGFloat {
+        22
+    }
+
+    private var buttonIconSize: CGFloat {
+        9
+    }
+
+    private var contentAlignment: Alignment {
+        isSimulatedNotch ? .top : .bottom
+    }
+
+    private var topCornerRadius: CGFloat {
+        isSimulatedNotch ? 8 : 18
+    }
+
+    private var bottomCornerRadius: CGFloat {
+        isSimulatedNotch ? 14 : 24
+    }
+
+    private var isSimulatedNotch: Bool {
+        overlayController.chromeStyle == .simulatedNotch
+    }
+
     private var displayTitle: String {
         guard let primary = timerEngine.primaryTask else {
             return "未选择任务"
@@ -24,16 +84,20 @@ struct NotchOverlayView: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: itemSpacing) {
             MarqueeText(
                 text: displayTitle,
-                font: .system(size: 15, weight: .semibold, design: .rounded),
+                font: .system(size: titleFontSize, weight: .semibold, design: .rounded),
                 foregroundColor: foregroundColor.opacity(timerEngine.primaryTask == nil ? 0.78 : 0.96)
             )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: titleRegionWidth, alignment: .leading)
+            .frame(maxWidth: titleRegionWidth == nil ? .infinity : nil, alignment: .leading)
+            .offset(y: 2)
+
+            Spacer(minLength: 0)
 
             Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(.system(size: clockFontSize, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(foregroundColor)
 
@@ -70,8 +134,10 @@ struct NotchOverlayView: View {
                 timerEngine.stopAll()
             }
         }
-        .padding(.horizontal, 16)
-        .frame(width: overlayWidth, height: 56)
+        .frame(width: contentWidth, height: contentHeight)
+        .padding(.top, contentTopInset)
+        .padding(.bottom, contentBottomInset)
+        .frame(width: overlayWidth, height: overlayHeight, alignment: contentAlignment)
         .background(backgroundShape)
         .frame(width: overlayWidth)
         .background(Color.clear)
@@ -90,41 +156,38 @@ struct NotchOverlayView: View {
             action()
         } label: {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .bold))
-                .frame(width: 36, height: 36)
+                .font(.system(size: buttonIconSize, weight: .bold))
+                .frame(width: buttonSize, height: buttonSize)
         }
         .buttonStyle(CompactOverlayButtonStyle(
             tint: isEnabled ? tint : .gray.opacity(0.28),
             foreground: .white,
-            usesDarkChrome: overlayController.chromeStyle == .notch
+            usesDarkChrome: true
         ))
         .disabled(!isEnabled)
     }
 
     private var foregroundColor: Color {
-        overlayController.chromeStyle == .notch ? .white : .primary
+        .white
     }
 
     @ViewBuilder
     private var backgroundShape: some View {
-        let capsule = Capsule(style: .continuous)
+        let notchShape = NotchShape(topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius)
 
-        if overlayController.chromeStyle == .notch {
-            capsule
-                .fill(Color.black.opacity(0.96))
-                .overlay {
-                    capsule
-                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.28), radius: 16, y: 10)
-        } else {
-            capsule
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    capsule
-                        .strokeBorder(.white.opacity(0.22), lineWidth: 1)
-                }
-        }
+        notchShape
+            .fill(Color.black.opacity(0.96))
+            .overlay {
+                notchShape
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(Color.black.opacity(0.96))
+                    .frame(height: 1)
+                    .padding(.horizontal, topCornerRadius)
+            }
+            .shadow(color: .black.opacity(0.34), radius: 14, y: 8)
     }
 }
 
