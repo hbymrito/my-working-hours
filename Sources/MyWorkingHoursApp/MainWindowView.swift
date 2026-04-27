@@ -8,6 +8,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     case projects
     case tags
     case records
+    case settings
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
         case .projects: "项目"
         case .tags: "标签"
         case .records: "记录"
+        case .settings: "设置"
         }
     }
 
@@ -30,6 +32,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
         case .projects: "square.grid.2x2"
         case .tags: "tag"
         case .records: "list.bullet.rectangle.portrait"
+        case .settings: "gearshape"
         }
     }
 }
@@ -38,6 +41,7 @@ struct MainWindowView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var timerEngine: TimerEngine
     @EnvironmentObject private var mainWindowRouter: MainWindowRouter
+    @EnvironmentObject private var appSettings: AppSettings
 
     @Query(sort: [SortDescriptor(\WorkTask.updatedAt, order: .reverse)]) private var tasks: [WorkTask]
     @Query(sort: [SortDescriptor(\Project.createdAt)]) private var projects: [Project]
@@ -45,6 +49,8 @@ struct MainWindowView: View {
     @Query(sort: [SortDescriptor(\TimeEntry.startAt, order: .reverse)]) private var entries: [TimeEntry]
 
     @State private var selectedSection: SidebarSection? = .today
+    @State private var displayedSection: SidebarSection = .today
+    @State private var routedSection: SidebarSection?
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
     @State private var selectedProjectID: UUID?
@@ -119,7 +125,7 @@ struct MainWindowView: View {
     }
 
     private var activeSection: SidebarSection {
-        selectedSection ?? .today
+        displayedSection
     }
 
     private var todayEntries: [TimeEntry] {
@@ -195,14 +201,14 @@ struct MainWindowView: View {
         }
         .onChange(of: selectedSection) { _, newSection in
             guard let newSection else { return }
-            // Skip clearing when the change originated from a router navigation — the router
-            // destination already matches the new section, so the ids were set intentionally.
-            if sectionFor(mainWindowRouter.destination) == newSection {
+            if routedSection == newSection {
+                routedSection = nil
                 return
             }
-            // Defer to the next run loop so we don't mutate another List's selection binding
-            // while the sidebar's NSTableView delegate is still processing this click.
+            // Defer page replacement and secondary List selection changes until after the
+            // sidebar NSTableView finishes processing its delegate selection callback.
             DispatchQueue.main.async {
+                displayedSection = newSection
                 selectedTaskID = nil
                 selectedProjectID = nil
                 selectedTagID = nil
@@ -219,6 +225,7 @@ struct MainWindowView: View {
         case .projects: return .projects
         case .tags: return .tags
         case .records: return .records
+        case .settings: return .settings
         }
     }
 
@@ -252,6 +259,8 @@ struct MainWindowView: View {
             }
         case .records:
             recordsContent
+        case .settings:
+            settingsContent
         }
     }
 
@@ -355,6 +364,8 @@ struct MainWindowView: View {
                     systemImage: "list.bullet.rectangle.portrait"
                 )
             }
+        case .settings:
+            EmptyView()
         }
     }
 
@@ -493,6 +504,17 @@ struct MainWindowView: View {
         }
     }
 
+    private var settingsContent: some View {
+        Form {
+            Section("显示") {
+                Toggle("启用刘海显示", isOn: $appSettings.isNotchDisplayEnabled)
+                Toggle("任务栏计时显示", isOn: $appSettings.isMenuBarTimerDisplayEnabled)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
@@ -538,28 +560,35 @@ struct MainWindowView: View {
                 } label: {
                     Label("新增记录", systemImage: "plus")
                 }
+            case .settings:
+                EmptyView()
             }
         }
     }
 
     private func apply(_ destination: MainWindowDestination) {
+        let destinationSection = sectionFor(destination)
+        if selectedSection != destinationSection {
+            routedSection = destinationSection
+        }
+        selectedSection = destinationSection
+        displayedSection = destinationSection
+
         switch destination {
         case .today:
-            selectedSection = .today
+            break
         case .overview:
-            selectedSection = .overview
+            break
         case .tasks(let taskID):
-            selectedSection = .tasks
             selectedTaskID = taskID
         case .projects(let projectID):
-            selectedSection = .projects
             selectedProjectID = projectID
         case .tags(let tagID):
-            selectedSection = .tags
             selectedTagID = tagID
         case .records(let entryID):
-            selectedSection = .records
             selectedEntryID = entryID
+        case .settings:
+            break
         }
     }
 

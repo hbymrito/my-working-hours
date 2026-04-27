@@ -9,6 +9,7 @@ enum MainWindowDestination: Equatable {
     case projects(UUID?)
     case tags(UUID?)
     case records(UUID?)
+    case settings
 }
 
 @MainActor

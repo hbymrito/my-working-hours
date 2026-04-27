@@ -22,6 +22,10 @@
 		10000000000000000000010D /* MyWorkingHoursAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020D /* MyWorkingHoursAppTests.swift */; };
 		10000000000000000000010E /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 10000000000000000000020E /* XCTest.framework */; };
 		10000000000000000000010F /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000211 /* AppIcon.icns */; };
+		100000000000000000000110 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000212 /* AppSettings.swift */; };
+		100000000000000000000111 /* NotchOverlayGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000213 /* NotchOverlayGeometry.swift */; };
+		100000000000000000000112 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000214 /* NotchShape.swift */; };
+		100000000000000000000113 /* NotchOverlayGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* NotchOverlayGeometryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +58,10 @@
 		10000000000000000000020F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		100000000000000000000210 /* build_app.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = build_app.sh; sourceTree = "<group>"; };
 		100000000000000000000211 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		100000000000000000000212 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		100000000000000000000213 /* NotchOverlayGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayGeometry.swift; sourceTree = "<group>"; };
+		100000000000000000000214 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
+		100000000000000000000215 /* NotchOverlayGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayGeometryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000201 /* MyWorkingHoursApp.swift */,
+				100000000000000000000212 /* AppSettings.swift */,
 				100000000000000000000202 /* MenuBarContentView.swift */,
 				100000000000000000000203 /* TimerEngine.swift */,
 				100000000000000000000204 /* NotchOverlayView.swift */,
@@ -111,6 +120,8 @@
 				10000000000000000000020A /* Utilities.swift */,
 				10000000000000000000020B /* TimeAggregationService.swift */,
 				10000000000000000000020C /* NotchOverlayController.swift */,
+				100000000000000000000213 /* NotchOverlayGeometry.swift */,
+				100000000000000000000214 /* NotchShape.swift */,
 			);
 			path = Sources/MyWorkingHoursApp;
 			sourceTree = SOURCE_ROOT;
@@ -119,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				10000000000000000000020D /* MyWorkingHoursAppTests.swift */,
+				100000000000000000000215 /* NotchOverlayGeometryTests.swift */,
 			);
 			path = Tests/MyWorkingHoursAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -238,6 +250,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000101 /* MyWorkingHoursApp.swift in Sources */,
+				100000000000000000000110 /* AppSettings.swift in Sources */,
 				100000000000000000000102 /* MenuBarContentView.swift in Sources */,
 				100000000000000000000103 /* TimerEngine.swift in Sources */,
 				100000000000000000000104 /* NotchOverlayView.swift in Sources */,
@@ -249,6 +262,8 @@
 				10000000000000000000010A /* Utilities.swift in Sources */,
 				10000000000000000000010B /* TimeAggregationService.swift in Sources */,
 				10000000000000000000010C /* NotchOverlayController.swift in Sources */,
+				100000000000000000000111 /* NotchOverlayGeometry.swift in Sources */,
+				100000000000000000000112 /* NotchShape.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,6 +272,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				10000000000000000000010D /* MyWorkingHoursAppTests.swift in Sources */,
+				100000000000000000000113 /* NotchOverlayGeometryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

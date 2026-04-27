@@ -23,11 +23,13 @@ final class AppServices: ObservableObject {
     let mainWindowRouter: MainWindowRouter
     let timerEngine: TimerEngine
     let notchOverlayController: NotchOverlayController
+    let appSettings: AppSettings
 
     init() {
         persistenceStore = PersistenceStore()
         aggregationService = TimeAggregationService()
         mainWindowRouter = MainWindowRouter()
+        appSettings = AppSettings()
         timerEngine = TimerEngine(
             context: persistenceStore.modelContainer.mainContext,
             persistenceStore: persistenceStore,
@@ -35,7 +37,8 @@ final class AppServices: ObservableObject {
         )
         notchOverlayController = NotchOverlayController(
             timerEngine: timerEngine,
-            mainWindowRouter: mainWindowRouter
+            mainWindowRouter: mainWindowRouter,
+            settings: appSettings
         )
     }
 
@@ -55,12 +58,14 @@ struct MyWorkingHoursApp: App {
         let container = services.persistenceStore.modelContainer
         let engine = services.timerEngine
         let router = services.mainWindowRouter
+        let settings = services.appSettings
 
         services.mainWindowRouter.installContentBuilder { [unowned router] in
             AnyView(
                 MainWindowView()
                     .environmentObject(engine)
                     .environmentObject(router)
+                    .environmentObject(settings)
                     .modelContainer(container)
             )
         }
@@ -82,10 +87,12 @@ struct MyWorkingHoursApp: App {
                 .environmentObject(services.timerEngine)
                 .environmentObject(services.notchOverlayController)
                 .environmentObject(services.mainWindowRouter)
+                .environmentObject(services.appSettings)
                 .modelContainer(services.persistenceStore.modelContainer)
         } label: {
             MenuBarLabelView()
                 .environmentObject(services.timerEngine)
+                .environmentObject(services.appSettings)
         }
         .menuBarExtraStyle(.window)
     }

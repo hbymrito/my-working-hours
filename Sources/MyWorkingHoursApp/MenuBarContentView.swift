@@ -2,11 +2,29 @@ import SwiftUI
 
 struct MenuBarLabelView: View {
     @EnvironmentObject private var timerEngine: TimerEngine
+    @EnvironmentObject private var appSettings: AppSettings
 
     var body: some View {
-        Label("My Working Hours", systemImage: timerEngine.timerState.status.symbolName)
-            .labelStyle(.iconOnly)
-            .foregroundStyle(timerEngine.timerState.status.tint)
+        Group {
+            if appSettings.isMenuBarTimerDisplayEnabled {
+                if timerEngine.runningCount > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer")
+                        Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(timerEngine.timerState.status.tint)
+                } else {
+                    Label("My Working Hours", systemImage: "timer")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Label("My Working Hours", systemImage: timerEngine.timerState.status.symbolName)
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(timerEngine.timerState.status.tint)
+            }
+        }
     }
 }
 
@@ -14,6 +32,7 @@ struct MenuBarContentView: View {
     @EnvironmentObject private var timerEngine: TimerEngine
     @EnvironmentObject private var overlayController: NotchOverlayController
     @EnvironmentObject private var mainWindowRouter: MainWindowRouter
+    @EnvironmentObject private var appSettings: AppSettings
 
     @State private var isTaskSwitcherPresented = false
 
@@ -170,11 +189,17 @@ struct MenuBarContentView: View {
                     }
                 }
 
-                menuAction(
-                    overlayController.mode == .pinned ? "收起刘海面板" : "固定刘海面板",
-                    systemImage: "rectangle.topthird.inset.filled"
-                ) {
-                    overlayController.togglePinned()
+                if appSettings.isNotchDisplayEnabled {
+                    menuAction(
+                        overlayController.mode == .pinned ? "收起刘海面板" : "固定刘海面板",
+                        systemImage: "rectangle.topthird.inset.filled"
+                    ) {
+                        overlayController.togglePinned()
+                    }
+                }
+
+                menuAction("打开设置", systemImage: "gearshape") {
+                    mainWindowRouter.open(.settings)
                 }
 
                 menuAction("退出应用", systemImage: "power") {

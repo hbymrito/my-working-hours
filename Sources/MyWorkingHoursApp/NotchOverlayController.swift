@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -11,23 +12,26 @@ final class NotchOverlayController: NSObject, ObservableObject {
 
     private let timerEngine: TimerEngine
     private let mainWindowRouter: MainWindowRouter
+    private let settings: AppSettings
 
     private var hitPanel: HitTargetPanel?
     private var overlayPanel: OverlayFloatingPanel?
     private var panelObservers: [NSObjectProtocol] = []
+    private var settingsCancellable: AnyCancellable?
     private var escapeKeyMonitor: Any?
     private var hoverOnHitTarget = false
     private var hoverOnOverlay = false
     private var hideWorkItem: DispatchWorkItem?
 
-    init(timerEngine: TimerEngine, mainWindowRouter: MainWindowRouter) {
+    init(timerEngine: TimerEngine, mainWindowRouter: MainWindowRouter, settings: AppSettings) {
         self.timerEngine = timerEngine
         self.mainWindowRouter = mainWindowRouter
+        self.settings = settings
         super.init()
     }
 
     func activate() {
-        rebuildPanels()
+        applyNotchDisplaySetting(settings.isNotchDisplayEnabled)
 
         panelObservers.append(
             NotificationCenter.default.addObserver(
@@ -36,10 +40,22 @@ final class NotchOverlayController: NSObject, ObservableObject {
                 queue: .main
             ) { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in
+                    guard self?.settings.isNotchDisplayEnabled == true else {
+                        return
+                    }
+
                     self?.rebuildPanels()
                 }
             }
         )
+
+        settingsCancellable = settings.$isNotchDisplayEnabled
+            .dropFirst()
+            .sink { [weak self] isEnabled in
+                Task { @MainActor [weak self] in
+                    self?.applyNotchDisplaySetting(isEnabled)
+                }
+            }
 
         escapeKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else {
@@ -57,6 +73,10 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     func togglePinned() {
+        guard settings.isNotchDisplayEnabled else {
+            return
+        }
+
         switch mode {
         case .hidden, .peek:
             showPinned()
@@ -66,6 +86,10 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     func showPinned() {
+        guard settings.isNotchDisplayEnabled else {
+            return
+        }
+
         hideWorkItem?.cancel()
         mode = .pinned
         updatePanels(animated: true)
@@ -73,6 +97,10 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     func showPeek() {
+        guard settings.isNotchDisplayEnabled else {
+            return
+        }
+
         guard mode != .pinned else {
             return
         }
@@ -108,6 +136,11 @@ final class NotchOverlayController: NSObject, ObservableObject {
     }
 
     private func rebuildPanels() {
+        guard settings.isNotchDisplayEnabled else {
+            tearDownPanels()
+            return
+        }
+
         hitPanel?.close()
         overlayPanel?.close()
 
@@ -168,7 +201,33 @@ final class NotchOverlayController: NSObject, ObservableObject {
         updatePanels(animated: false)
     }
 
+    private func applyNotchDisplaySetting(_ isEnabled: Bool) {
+        if isEnabled {
+            rebuildPanels()
+        } else {
+            tearDownPanels()
+        }
+    }
+
+    private func tearDownPanels() {
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        isTaskSwitcherPresented = false
+        hoverOnHitTarget = false
+        hoverOnOverlay = false
+        mode = .hidden
+
+        hitPanel?.close()
+        overlayPanel?.close()
+        hitPanel = nil
+        overlayPanel = nil
+    }
+
     private func updatePanels(animated: Bool) {
+        guard settings.isNotchDisplayEnabled else {
+            return
+        }
+
         guard let hitPanel,
               let overlayPanel,
               let screen = targetScreen()

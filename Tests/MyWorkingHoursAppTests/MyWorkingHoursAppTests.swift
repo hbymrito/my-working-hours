@@ -12,6 +12,26 @@ private final class TestClock {
 
 @MainActor
 final class MyWorkingHoursAppTests: XCTestCase {
+    func testAppSettingsDefaults() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString) ?? .standard
+        let settings = AppSettings(defaults: defaults)
+
+        XCTAssertTrue(settings.isNotchDisplayEnabled)
+        XCTAssertFalse(settings.isMenuBarTimerDisplayEnabled)
+    }
+
+    func testAppSettingsPersistsValues() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString) ?? .standard
+        let settings = AppSettings(defaults: defaults)
+
+        settings.isNotchDisplayEnabled = false
+        settings.isMenuBarTimerDisplayEnabled = true
+
+        let restoredSettings = AppSettings(defaults: defaults)
+        XCTAssertFalse(restoredSettings.isNotchDisplayEnabled)
+        XCTAssertTrue(restoredSettings.isMenuBarTimerDisplayEnabled)
+    }
+
     private func makeEngine(clock: TestClock) -> (PersistenceStore, TimerEngine) {
         let store = PersistenceStore(inMemory: true)
         let defaults = UserDefaults(suiteName: UUID().uuidString) ?? .standard
