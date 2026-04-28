@@ -1,5 +1,11 @@
 # MyWorkingHours
 
+> ⚠️ **重要：请务必使用 1.4.0 及以上版本**
+>
+> 1.3.1 及更早版本存在严重缺陷：SwiftData 使用了未命名的默认存储路径 `~/Library/Application Support/default.store`，会与系统中其他同样使用默认路径的进程（如 `icloudmailagent`）共用同一文件。两边各自的 schema 互相触发 lightweight migration 时，**有可能把整个数据库清空，导致所有任务和工时记录丢失**。
+>
+> 1.4.0 已将存储迁移到独占目录 `~/Library/Application Support/MyWorkingHours/store.sqlite`，彻底规避此问题。**强烈建议立即升级。** 老用户的旧数据库 `~/Library/Application Support/default.store` 已不再使用，可以放心删除；如已发生数据丢失，可尝试用 sqlite3 `.recover` 命令从旧文件恢复，或通过 Time Machine / APFS 本地快照回滚。
+
 一个面向 macOS 的刘海区工时计时器应用。
 
 常驻菜单栏，可在刘海区域或顶部中央呼出横条计时面板，以接近 macOS 原生的磨砂 / 胶囊风格完成开始、暂停、停止计时；同时提供主界面，用来管理任务、项目、标签和工时记录，以及按日期或时间范围查看汇总。
