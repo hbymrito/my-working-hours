@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -510,9 +511,32 @@ struct MainWindowView: View {
                 Toggle("启用刘海显示", isOn: $appSettings.isNotchDisplayEnabled)
                 Toggle("任务栏计时显示", isOn: $appSettings.isMenuBarTimerDisplayEnabled)
             }
+            Section("数据") {
+                Button("导出 CSV…") { exportCSV() }
+            }
         }
         .formStyle(.grouped)
         .padding()
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = CSVExportService.suggestedFileName()
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let csv = CSVExportService.makeCSV(from: entries)
+        do {
+            try csv.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "导出失败"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "好")
+            alert.runModal()
+        }
     }
 
     @ToolbarContentBuilder
