@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PRODUCT_NAME="MyWorkingHours"
 CONFIGURATION="${CONFIGURATION:-release}"
-MARKETING_VERSION="${MARKETING_VERSION:-1.0.0}"
-BUILD_NUMBER="${BUILD_NUMBER:-1}"
+MARKETING_VERSION="${MARKETING_VERSION:-1.5.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-8}"
 
 BUILD_DIR="$ROOT_DIR/.build"
 DIST_DIR="$ROOT_DIR/dist"
@@ -19,10 +19,14 @@ INFO_PLIST_TEMPLATE="$ROOT_DIR/Packaging/Info.plist"
 ICON_FILE="$ROOT_DIR/Resources/AppIcon.icns"
 
 echo "Building $PRODUCT_NAME ($CONFIGURATION)..."
-swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME"
-
-BIN_DIR="$(swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME" --show-bin-path)"
-EXECUTABLE_PATH="$BIN_DIR/$PRODUCT_NAME"
+if [[ "${SKIP_BUILD:-0}" == "1" ]]; then
+    ARCH="$(uname -m)"
+    EXECUTABLE_PATH="$BUILD_DIR/$ARCH-apple-macosx/$CONFIGURATION/$PRODUCT_NAME"
+else
+    swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME"
+    BIN_DIR="$(swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME" --show-bin-path)"
+    EXECUTABLE_PATH="$BIN_DIR/$PRODUCT_NAME"
+fi
 
 if [[ ! -x "$EXECUTABLE_PATH" ]]; then
   echo "Expected executable not found at $EXECUTABLE_PATH" >&2

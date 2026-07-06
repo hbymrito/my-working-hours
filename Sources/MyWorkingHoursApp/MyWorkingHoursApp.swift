@@ -64,6 +64,7 @@ struct MyWorkingHoursApp: App {
             AnyView(
                 MainWindowView()
                     .environmentObject(engine)
+                    .environmentObject(engine.metrics)
                     .environmentObject(router)
                     .environmentObject(settings)
                     .modelContainer(container)
@@ -85,6 +86,7 @@ struct MyWorkingHoursApp: App {
         MenuBarExtra {
             MenuBarContentView()
                 .environmentObject(services.timerEngine)
+                .environmentObject(services.timerEngine.metrics)
                 .environmentObject(services.notchOverlayController)
                 .environmentObject(services.mainWindowRouter)
                 .environmentObject(services.appSettings)
@@ -92,6 +94,7 @@ struct MyWorkingHoursApp: App {
         } label: {
             MenuBarLabelView()
                 .environmentObject(services.timerEngine)
+                .environmentObject(services.timerEngine.metrics)
                 .environmentObject(services.appSettings)
         }
         .menuBarExtraStyle(.window)

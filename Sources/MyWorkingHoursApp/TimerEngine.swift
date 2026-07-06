@@ -3,6 +3,46 @@ import Foundation
 import SwiftData
 
 @MainActor
+final class TimerMetrics: ObservableObject {
+    struct Snapshot {
+        let now: Date
+        let primarySessionDuration: TimeInterval
+        let todayTotalDuration: TimeInterval
+        let todayWallClockDuration: TimeInterval
+    }
+
+    @Published private(set) var snapshot: Snapshot
+
+    var now: Date { snapshot.now }
+    var primarySessionDuration: TimeInterval { snapshot.primarySessionDuration }
+    var todayTotalDuration: TimeInterval { snapshot.todayTotalDuration }
+    var todayWallClockDuration: TimeInterval { snapshot.todayWallClockDuration }
+
+    init(now: Date) {
+        snapshot = Snapshot(
+            now: now,
+            primarySessionDuration: 0,
+            todayTotalDuration: 0,
+            todayWallClockDuration: 0
+        )
+    }
+
+    func update(
+        now: Date,
+        primarySessionDuration: TimeInterval,
+        todayTotalDuration: TimeInterval,
+        todayWallClockDuration: TimeInterval
+    ) {
+        snapshot = Snapshot(
+            now: now,
+            primarySessionDuration: primarySessionDuration,
+            todayTotalDuration: todayTotalDuration,
+            todayWallClockDuration: todayWallClockDuration
+        )
+    }
+}
+
+@MainActor
 final class TimerStateStore {
     private let defaults: UserDefaults
     private let key: String
@@ -39,14 +79,16 @@ final class TimerEngine: ObservableObject {
     @Published private(set) var pausedTasks: [WorkTask] = []
     @Published private(set) var primaryTask: WorkTask?
     @Published private(set) var primaryRunningEntry: TimeEntry?
-    @Published private(set) var primarySessionDuration: TimeInterval = 0
     @Published private(set) var runningCount: Int = 0
     @Published private(set) var pausedCount: Int = 0
-    @Published private(set) var todayTotalDuration: TimeInterval = 0
-    @Published private(set) var todayWallClockDuration: TimeInterval = 0
-    @Published private(set) var now: Date
 
     let aggregationService: TimeAggregationService
+    let metrics: TimerMetrics
+
+    var primarySessionDuration: TimeInterval { metrics.primarySessionDuration }
+    var todayTotalDuration: TimeInterval { metrics.todayTotalDuration }
+    var todayWallClockDuration: TimeInterval { metrics.todayWallClockDuration }
+    var now: Date { metrics.now }
 
     private let modelContext: ModelContext
     private let persistenceStore: PersistenceStore
@@ -59,6 +101,7 @@ final class TimerEngine: ObservableObject {
     /// Cached entries — only re-fetched when `entriesDirty` is true.
     private var cachedOpenEntries: [TimeEntry] = []
     private var cachedAllEntries: [TimeEntry] = []
+    private var cachedTodayEntries: [TimeEntry] = []
     private var entriesDirty = true
     /// Track the last day we refreshed for midnight rollover detection.
     private var lastRefreshDay: Int = -1
@@ -76,7 +119,7 @@ final class TimerEngine: ObservableObject {
         self.stateStore = stateStore
         self.nowProvider = nowProvider
         let initialNow = nowProvider()
-        now = initialNow
+        metrics = TimerMetrics(now: initialNow)
         timerState = stateStore.load() ?? .idle(now: initialNow)
         lastRefreshDay = aggregationService.calendar.component(.day, from: initialNow)
 
@@ -151,7 +194,20 @@ final class TimerEngine: ObservableObject {
         }
 
         timerState.lastInteractionAt = timestamp
-        persistAndRefresh()
+        let canUpdateCacheIncrementally = !entriesDirty
+        persistenceStore.save(modelContext)
+
+        if canUpdateCacheIncrementally {
+            cachedOpenEntries.append(entry)
+            cachedOpenEntries.sort { $0.startAt < $1.startAt }
+            cachedAllEntries.append(entry)
+            cachedAllEntries.sort { $0.startAt > $1.startAt }
+            cachedTodayEntries.append(entry)
+            publishSnapshot(at: timestamp)
+        } else {
+            invalidateCache()
+            refreshSnapshot()
+        }
     }
 
     func pause(task: WorkTask) {
@@ -255,13 +311,22 @@ final class TimerEngine: ObservableObject {
         )
 
         modelContext.insert(task)
-        persistenceStore.save(modelContext)
 
         // Set as primary and add to paused (ready to start)
-        timerState.primaryTaskID = task.id
-        timerState.pausedTaskIDs.insert(task.id)
-        timerState.lastInteractionAt = timestamp
-        persistAndRefresh()
+        var newState = timerState
+        newState.primaryTaskID = task.id
+        newState.pausedTaskIDs.insert(task.id)
+        newState.lastInteractionAt = timestamp
+        newState.status = runningCount > 0 ? .running : .paused
+        timerState = newState
+
+        primaryTask = task
+        primaryRunningEntry = nil
+        pausedTasks.append(task)
+        pausedCount = pausedTasks.count
+
+        persistenceStore.save(modelContext)
+        stateStore.save(timerState)
 
         return task
     }
@@ -278,10 +343,10 @@ final class TimerEngine: ObservableObject {
     /// Tick-only refresh: recalculates durations without re-fetching entries from DB.
     /// Called by the 1-second heartbeat timer.
     private func tickRefresh() {
-        now = nowProvider()
+        let timestamp = nowProvider()
 
         // Detect midnight rollover
-        let currentDay = aggregationService.calendar.component(.day, from: now)
+        let currentDay = aggregationService.calendar.component(.day, from: timestamp)
         if currentDay != lastRefreshDay {
             lastRefreshDay = currentDay
             invalidateCache()
@@ -294,29 +359,38 @@ final class TimerEngine: ObservableObject {
         }
 
         // Only recalculate durations from cached entries
-        if let primaryRunningEntry {
-            primarySessionDuration = max(0, now.timeIntervalSince(primaryRunningEntry.startAt))
-        } else {
-            primarySessionDuration = 0
-        }
-
-        todayTotalDuration = aggregationService.totalDuration(on: now, entries: cachedAllEntries, now: now)
-        todayWallClockDuration = aggregationService.wallClockDuration(on: now, entries: cachedAllEntries, now: now)
-        stateStore.save(timerState)
+        let primaryDuration = primaryRunningEntry.map { max(0, timestamp.timeIntervalSince($0.startAt)) } ?? 0
+        metrics.update(
+            now: timestamp,
+            primarySessionDuration: primaryDuration,
+            todayTotalDuration: aggregationService.totalDuration(on: timestamp, entries: cachedTodayEntries, now: timestamp),
+            todayWallClockDuration: aggregationService.wallClockDuration(on: timestamp, entries: cachedTodayEntries, now: timestamp)
+        )
     }
 
     func refreshSnapshot() {
-        now = nowProvider()
+        let timestamp = nowProvider()
 
-        let currentDay = aggregationService.calendar.component(.day, from: now)
+        let currentDay = aggregationService.calendar.component(.day, from: timestamp)
         lastRefreshDay = currentDay
 
         // Full re-fetch from DB
         cachedOpenEntries = fetchOpenEntries()
         cachedAllEntries = fetchAllEntries()
+        let todayInterval = aggregationService.dayInterval(for: timestamp)
+        cachedTodayEntries = cachedAllEntries.filter {
+            aggregationService.overlapDuration(of: $0, within: todayInterval, now: timestamp) > 0
+        }
         entriesDirty = false
 
-        repairStateIfNeeded()
+        repairStateIfNeeded(openEntries: cachedOpenEntries)
+
+        publishSnapshot(at: timestamp)
+    }
+
+    private func publishSnapshot(at timestamp: Date) {
+
+        let previouslyPausedTasks = Dictionary(uniqueKeysWithValues: pausedTasks.map { ($0.id, $0) })
 
         // Derive running state from open entries
         runningEntries = cachedOpenEntries
@@ -324,22 +398,24 @@ final class TimerEngine: ObservableObject {
         runningCount = runningTasks.count
 
         // Derive paused tasks
-        pausedTasks = timerState.pausedTaskIDs.compactMap { fetchTask(id: $0) }
+        pausedTasks = timerState.pausedTaskIDs.compactMap { taskID in
+            previouslyPausedTasks[taskID] ?? fetchTask(id: taskID)
+        }
         pausedCount = pausedTasks.count
 
         // Resolve primary task
-        primaryTask = fetchTask(id: timerState.primaryTaskID)
+        primaryTask = (runningTasks + pausedTasks).first { $0.id == timerState.primaryTaskID }
+            ?? fetchTask(id: timerState.primaryTaskID)
         primaryRunningEntry = cachedOpenEntries.first { $0.task?.id == timerState.primaryTaskID }
 
         // Duration calculations
-        if let primaryRunningEntry {
-            primarySessionDuration = max(0, now.timeIntervalSince(primaryRunningEntry.startAt))
-        } else {
-            primarySessionDuration = 0
-        }
-
-        todayTotalDuration = aggregationService.totalDuration(on: now, entries: cachedAllEntries, now: now)
-        todayWallClockDuration = aggregationService.wallClockDuration(on: now, entries: cachedAllEntries, now: now)
+        let primaryDuration = primaryRunningEntry.map { max(0, timestamp.timeIntervalSince($0.startAt)) } ?? 0
+        metrics.update(
+            now: timestamp,
+            primarySessionDuration: primaryDuration,
+            todayTotalDuration: aggregationService.totalDuration(on: timestamp, entries: cachedTodayEntries, now: timestamp),
+            todayWallClockDuration: aggregationService.wallClockDuration(on: timestamp, entries: cachedTodayEntries, now: timestamp)
+        )
 
         // Derive overview status
         if runningCount > 0 {
@@ -360,7 +436,7 @@ final class TimerEngine: ObservableObject {
 
     // MARK: - State repair
 
-    private func repairStateIfNeeded() {
+    private func repairStateIfNeeded(openEntries: [TimeEntry]) {
         var dirty = false
 
         // Clean up pausedTaskIDs: remove IDs for tasks that no longer exist
@@ -371,7 +447,6 @@ final class TimerEngine: ObservableObject {
         }
 
         // A task that is both running (has open entry) and in pausedTaskIDs is contradictory — remove from paused
-        let openEntries = fetchOpenEntries()
         let runningTaskIDs = Set(openEntries.compactMap { $0.task?.id })
         let runningAndPaused = timerState.pausedTaskIDs.intersection(runningTaskIDs)
         if !runningAndPaused.isEmpty {

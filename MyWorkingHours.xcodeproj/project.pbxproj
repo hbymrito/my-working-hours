@@ -26,6 +26,10 @@
 		100000000000000000000111 /* NotchOverlayGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000213 /* NotchOverlayGeometry.swift */; };
 		100000000000000000000112 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000214 /* NotchShape.swift */; };
 		100000000000000000000113 /* NotchOverlayGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* NotchOverlayGeometryTests.swift */; };
+		100000000000000000000114 /* WorkflowServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* WorkflowServices.swift */; };
+		100000000000000000000115 /* DailyTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* DailyTimelineView.swift */; };
+		100000000000000000000116 /* WorkflowServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* WorkflowServicesTests.swift */; };
+		100000000000000000000117 /* CSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* CSVExportService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +66,10 @@
 		100000000000000000000213 /* NotchOverlayGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayGeometry.swift; sourceTree = "<group>"; };
 		100000000000000000000214 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
 		100000000000000000000215 /* NotchOverlayGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayGeometryTests.swift; sourceTree = "<group>"; };
+		100000000000000000000216 /* WorkflowServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowServices.swift; sourceTree = "<group>"; };
+		100000000000000000000217 /* DailyTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTimelineView.swift; sourceTree = "<group>"; };
+		100000000000000000000218 /* WorkflowServicesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowServicesTests.swift; sourceTree = "<group>"; };
+		100000000000000000000219 /* CSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVExportService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +130,9 @@
 				10000000000000000000020C /* NotchOverlayController.swift */,
 				100000000000000000000213 /* NotchOverlayGeometry.swift */,
 				100000000000000000000214 /* NotchShape.swift */,
+				100000000000000000000216 /* WorkflowServices.swift */,
+				100000000000000000000217 /* DailyTimelineView.swift */,
+				100000000000000000000219 /* CSVExportService.swift */,
 			);
 			path = Sources/MyWorkingHoursApp;
 			sourceTree = SOURCE_ROOT;
@@ -131,6 +142,7 @@
 			children = (
 				10000000000000000000020D /* MyWorkingHoursAppTests.swift */,
 				100000000000000000000215 /* NotchOverlayGeometryTests.swift */,
+				100000000000000000000218 /* WorkflowServicesTests.swift */,
 			);
 			path = Tests/MyWorkingHoursAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -264,6 +276,9 @@
 				10000000000000000000010C /* NotchOverlayController.swift in Sources */,
 				100000000000000000000111 /* NotchOverlayGeometry.swift in Sources */,
 				100000000000000000000112 /* NotchShape.swift in Sources */,
+				100000000000000000000114 /* WorkflowServices.swift in Sources */,
+				100000000000000000000115 /* DailyTimelineView.swift in Sources */,
+				100000000000000000000117 /* CSVExportService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -273,6 +288,7 @@
 			files = (
 				10000000000000000000010D /* MyWorkingHoursAppTests.swift in Sources */,
 				100000000000000000000113 /* NotchOverlayGeometryTests.swift in Sources */,
+				100000000000000000000116 /* WorkflowServicesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -319,7 +335,7 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 8;
 				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -329,7 +345,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hbymrito.MyWorkingHours;
 				PRODUCT_MODULE_NAME = MyWorkingHoursApp;
 				PRODUCT_NAME = MyWorkingHours;
@@ -346,7 +362,7 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 8;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Packaging/Info.plist;
@@ -355,7 +371,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hbymrito.MyWorkingHours;
 				PRODUCT_MODULE_NAME = MyWorkingHoursApp;
 				PRODUCT_NAME = MyWorkingHours;

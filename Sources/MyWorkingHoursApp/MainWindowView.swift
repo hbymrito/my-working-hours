@@ -4,6 +4,7 @@ import SwiftUI
 
 private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     case today
+    case timeline
     case overview
     case tasks
     case projects
@@ -16,6 +17,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .today: "今天"
+        case .timeline: "时间轴"
         case .overview: "总览"
         case .tasks: "所有任务"
         case .projects: "项目"
@@ -28,6 +30,7 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     var systemImage: String {
         switch self {
         case .today: "clock.badge.checkmark"
+        case .timeline: "calendar.day.timeline.left"
         case .overview: "chart.bar.xaxis"
         case .tasks: "checklist"
         case .projects: "square.grid.2x2"
@@ -49,14 +52,18 @@ struct MainWindowView: View {
     @Query(sort: [SortDescriptor(\Tag.createdAt)]) private var tags: [Tag]
     @Query(sort: [SortDescriptor(\TimeEntry.startAt, order: .reverse)]) private var entries: [TimeEntry]
 
-    @State private var selectedSection: SidebarSection? = .today
-    @State private var displayedSection: SidebarSection = .today
-    @State private var routedSection: SidebarSection?
+    @State private var selectedSection: SidebarSection = .today
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
     @State private var selectedProjectID: UUID?
     @State private var selectedTagID: UUID?
     @State private var selectedEntryID: UUID?
+    @State private var timelineViewDate = Date()
+    @State private var timelineEditingEntryID: UUID?
+    @State private var pendingMergeSuggestion: TimeEntryMergeSuggestion?
+    @State private var pendingArchiveTaskID: UUID?
+    @State private var isArchiveAllConfirmationPresented = false
+    @State private var workflowErrorMessage: String?
     @State private var recordFilterDate = Date()
     @State private var recordProjectID: UUID?
     @State private var recordTagID: UUID?
@@ -66,78 +73,35 @@ struct MainWindowView: View {
     @State private var overviewCustomStart: Date = Calendar.autoupdatingCurrent.date(byAdding: .day, value: -6, to: Date()) ?? Date()
     @State private var overviewCustomEnd: Date = Date()
 
-    private var todaySummaries: [TaskSummary] {
-        timerEngine.aggregationService.groupedDurations(on: todayViewDate, entries: entries, now: timerEngine.now)
-            .sorted { a, b in
-                let aOrder = taskSortOrder(a.task)
-                let bOrder = taskSortOrder(b.task)
-                if aOrder != bOrder { return aOrder < bOrder }
-                return a.duration > b.duration
-            }
-    }
-
-    private var isViewingToday: Bool {
-        Calendar.autoupdatingCurrent.isDate(todayViewDate, inSameDayAs: timerEngine.now)
-    }
-
-    private var todayViewTotalDuration: TimeInterval {
-        timerEngine.aggregationService.totalDuration(on: todayViewDate, entries: entries, now: timerEngine.now)
-    }
-
-    private var todayViewWallClockDuration: TimeInterval {
-        let interval = timerEngine.aggregationService.dayInterval(for: todayViewDate)
-        return timerEngine.aggregationService.wallClockDuration(in: interval, entries: entries, now: timerEngine.now)
-    }
-
-    private var todayViewDateBinding: Binding<Date> {
-        Binding(
-            get: { todayViewDate },
-            set: { newValue in
-                if selectedTaskID != nil {
-                    selectedTaskID = nil
-                }
-                todayViewDate = newValue
-            }
-        )
-    }
-
-    /// Selection binding for the today List. The getter filters out any id that isn't
-    /// present in todaySummaries so the List's NSTableView never sees a stale selection
-    /// tag after the date changes — which otherwise would trigger a reentrant delegate
-    /// call when the table reloads with mismatching selection + data.
-    private var todaySelectedTaskBinding: Binding<UUID?> {
-        Binding(
-            get: {
-                guard let id = selectedTaskID,
-                      todaySummaries.contains(where: { $0.task.id == id }) else {
-                    return nil
-                }
-                return id
-            },
-            set: { selectedTaskID = $0 }
-        )
-    }
-
-    /// Running = 0, Paused = 1, Stopped = 2 — for sorting active tasks first.
-    private func taskSortOrder(_ task: WorkTask) -> Int {
-        if timerEngine.isTaskRunning(task) { return 0 }
-        if timerEngine.isTaskPaused(task) { return 1 }
-        return 2
-    }
+    private let timelineWorkflowService = TimelineWorkflowService()
+    private let taskWorkflowService = TaskWorkflowService()
 
     private var activeSection: SidebarSection {
-        displayedSection
-    }
-
-    private var todayEntries: [TimeEntry] {
-        let interval = timerEngine.aggregationService.dayInterval(for: todayViewDate)
-        return entries.filter {
-            timerEngine.aggregationService.overlapDuration(of: $0, within: interval, now: timerEngine.now) > 0
-        }
+        selectedSection
     }
 
     private var filteredTasks: [WorkTask] {
         applySearch(to: tasks) { $0.title }
+    }
+
+    private var taskBuckets: TaskArchiveBuckets {
+        let activeTaskIDs = Set((timerEngine.runningTasks + timerEngine.pausedTasks).map(\.id))
+        return taskWorkflowService.archiveBuckets(
+            tasks: tasks,
+            entries: entries,
+            activeTaskIDs: activeTaskIDs,
+            now: timerEngine.now
+        )
+    }
+
+    private var filteredTaskBuckets: TaskArchiveBuckets {
+        let visibleIDs = Set(filteredTasks.map(\.id))
+        let buckets = taskBuckets
+        return TaskArchiveBuckets(
+            active: buckets.active.filter { visibleIDs.contains($0.id) },
+            suggested: buckets.suggested.filter { visibleIDs.contains($0.id) },
+            archived: buckets.archived.filter { visibleIDs.contains($0.id) }
+        )
     }
 
     private var filteredProjects: [Project] {
@@ -179,11 +143,20 @@ struct MainWindowView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selectedSection) {
-                ForEach(SidebarSection.allCases, id: \.self) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(Optional(section))
+            ScrollView {
+                LazyVStack(spacing: 3) {
+                    ForEach(SidebarSection.allCases, id: \.self) { section in
+                        Button {
+                            selectSection(section)
+                        } label: {
+                            Label(section.title, systemImage: section.systemImage)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .selectionRow(isSelected: selectedSection == section)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .padding(8)
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 220)
         } content: {
@@ -200,21 +173,83 @@ struct MainWindowView: View {
         .onChange(of: mainWindowRouter.destination, initial: true) { _, destination in
             apply(destination)
         }
-        .onChange(of: selectedSection) { _, newSection in
-            guard let newSection else { return }
-            if routedSection == newSection {
-                routedSection = nil
-                return
+        .sheet(isPresented: Binding(
+            get: { timelineEditingEntryID != nil },
+            set: { if !$0 { timelineEditingEntryID = nil } }
+        )) {
+            if let entryID = timelineEditingEntryID,
+               let entry = entries.first(where: { $0.id == entryID }) {
+                VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Button("完成") { timelineEditingEntryID = nil }
+                    }
+                    .padding(12)
+
+                    Divider()
+
+                    TimeEntryInspector(
+                        entry: entry,
+                        tasks: tasks,
+                        timerEngine: timerEngine,
+                        modelContext: modelContext,
+                        onDelete: {
+                            timelineEditingEntryID = nil
+                            deleteEntry(entry)
+                        }
+                    )
+                }
+                .frame(minWidth: 520, minHeight: 620)
             }
-            // Defer page replacement and secondary List selection changes until after the
-            // sidebar NSTableView finishes processing its delegate selection callback.
-            DispatchQueue.main.async {
-                displayedSection = newSection
-                selectedTaskID = nil
-                selectedProjectID = nil
-                selectedTagID = nil
-                selectedEntryID = nil
+        }
+        .confirmationDialog(
+            "合并相邻记录？",
+            isPresented: Binding(
+                get: { pendingMergeSuggestion != nil },
+                set: { if !$0 { pendingMergeSuggestion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("确认合并") { mergePendingSuggestion() }
+            Button("取消", role: .cancel) { pendingMergeSuggestion = nil }
+        } message: {
+            if let suggestion = pendingMergeSuggestion {
+                Text("将 \(suggestion.entryIDs.count) 条“\(suggestion.taskTitle)”记录合并为一条，并计入间隔中的 \(DurationTextFormatter.compact(suggestion.includedGapDuration))。")
             }
+        }
+        .confirmationDialog(
+            "归档全部建议任务？",
+            isPresented: $isArchiveAllConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("确认归档") { archiveSuggestedTasks() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这些任务至少 30 天没有计时记录；归档不会删除任务或历史工时。")
+        }
+        .confirmationDialog(
+            "归档这个任务？",
+            isPresented: Binding(
+                get: { pendingArchiveTaskID != nil },
+                set: { if !$0 { pendingArchiveTaskID = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("确认归档") { archivePendingTask() }
+            Button("取消", role: .cancel) { pendingArchiveTaskID = nil }
+        } message: {
+            Text("归档后不会出现在快速任务选择中，历史工时仍会保留。")
+        }
+        .alert(
+            "操作失败",
+            isPresented: Binding(
+                get: { workflowErrorMessage != nil },
+                set: { if !$0 { workflowErrorMessage = nil } }
+            )
+        ) {
+            Button("好") { workflowErrorMessage = nil }
+        } message: {
+            Text(workflowErrorMessage ?? "未知错误")
         }
     }
 
@@ -235,27 +270,53 @@ struct MainWindowView: View {
         switch activeSection {
         case .today:
             todayContent
+        case .timeline:
+            TimelineDaySidebar(
+                date: $timelineViewDate,
+                entries: entries,
+                workflowService: timelineWorkflowService,
+                aggregationService: timerEngine.aggregationService,
+                onEdit: { timelineEditingEntryID = $0 },
+                onRequestMerge: { pendingMergeSuggestion = $0 }
+            )
         case .overview:
             overviewContent
         case .tasks:
-            searchableList(title: "搜索任务", text: $searchText) {
-                List(filteredTasks, id: \.id, selection: $selectedTaskID) { task in
-                    TaskRow(task: task, timerEngine: timerEngine)
-                        .tag(task.id)
-                }
-            }
+            tasksContent
         case .projects:
             searchableList(title: "搜索项目", text: $searchText) {
-                List(filteredProjects, id: \.id, selection: $selectedProjectID) { project in
-                    ProjectRow(project: project, taskCount: tasks.filter { $0.project?.id == project.id }.count)
-                        .tag(project.id)
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        ForEach(filteredProjects) { project in
+                            Button {
+                                selectedProjectID = project.id
+                            } label: {
+                                ProjectRow(project: project, taskCount: tasks.filter { $0.project?.id == project.id }.count)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .selectionRow(isSelected: selectedProjectID == project.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(8)
                 }
             }
         case .tags:
             searchableList(title: "搜索标签", text: $searchText) {
-                List(filteredTags, id: \.id, selection: $selectedTagID) { tag in
-                    TagRow(tag: tag, taskCount: tasks.filter { task in task.tags.contains(where: { $0.id == tag.id }) }.count)
-                        .tag(tag.id)
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        ForEach(filteredTags) { tag in
+                            Button {
+                                selectedTagID = tag.id
+                            } label: {
+                                TagRow(tag: tag, taskCount: tasks.filter { task in task.tags.contains(where: { $0.id == tag.id }) }.count)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .selectionRow(isSelected: selectedTagID == tag.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(8)
                 }
             }
         case .records:
@@ -283,14 +344,17 @@ struct MainWindowView: View {
             } else {
                 TodayOverview(
                     date: todayViewDate,
-                    isToday: isViewingToday,
-                    totalDuration: todayViewTotalDuration,
-                    wallClockDuration: todayViewWallClockDuration,
-                    summaries: todaySummaries,
-                    entries: todayEntries,
+                    entries: entries,
                     timerEngine: timerEngine
                 )
             }
+        case .timeline:
+            DailyTimelineView(
+                date: timelineViewDate,
+                entries: entries,
+                workflowService: timelineWorkflowService,
+                onEdit: { timelineEditingEntryID = $0 }
+            )
         case .overview:
             if let selectedTask = tasks.first(where: { $0.id == selectedTaskID }) {
                 TaskInspector(
@@ -370,88 +434,96 @@ struct MainWindowView: View {
         }
     }
 
-    private var todayContent: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                DatePicker("日期", selection: todayViewDateBinding, displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
+    private var tasksContent: some View {
+        let buckets = filteredTaskBuckets
 
-                if !isViewingToday {
-                    Button("回到今天") {
-                        selectedTaskID = nil
-                        todayViewDate = Date()
+        return searchableList(title: "搜索任务", text: $searchText) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                if !buckets.active.isEmpty {
+                    Section("活跃任务") {
+                        ForEach(buckets.active) { task in
+                            Button {
+                                selectedTaskID = task.id
+                            } label: {
+                                TaskRow(task: task, timerEngine: timerEngine)
+                                    .selectionRow(isSelected: selectedTaskID == task.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
 
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 6)
+                if !buckets.suggested.isEmpty {
+                    Section {
+                        ForEach(buckets.suggested) { task in
+                            HStack(spacing: 8) {
+                                Button {
+                                    selectedTaskID = task.id
+                                } label: {
+                                    TaskRow(task: task, timerEngine: timerEngine)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
 
-            List(selection: todaySelectedTaskBinding) {
-                Section(isViewingToday ? "今日任务" : "\(todayViewDate.shortDateText()) 的任务") {
-                    if todaySummaries.isEmpty {
-                        Text("这一天没有计时记录")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ForEach(todaySummaries) { summary in
+                                Button {
+                                    pendingArchiveTaskID = task.id
+                                } label: {
+                                    Image(systemName: "archivebox")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("归档任务")
+                            }
+                            .selectionRow(isSelected: selectedTaskID == task.id)
+                        }
+                    } header: {
                         HStack {
-                            TaskRow(task: summary.task, timerEngine: timerEngine)
+                            Text("建议归档 · 30 天未使用")
                             Spacer()
-                            Text(DurationTextFormatter.compact(summary.duration))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                            Button("全部归档") {
+                                isArchiveAllConfirmationPresented = true
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
                         }
-                        .tag(summary.task.id)
                     }
                 }
 
-                Section(isViewingToday ? "最近记录" : "当日记录") {
-                    ForEach(todayEntries.prefix(12), id: \.id) { entry in
-                        Button {
-                            let taskID = entry.task?.id
-                            DispatchQueue.main.async {
-                                selectedTaskID = taskID
+                if !buckets.archived.isEmpty {
+                    Section("已归档") {
+                        ForEach(buckets.archived) { task in
+                            Button {
+                                selectedTaskID = task.id
+                            } label: {
+                                TaskRow(task: task, timerEngine: timerEngine)
+                                    .opacity(0.65)
+                                    .selectionRow(isSelected: selectedTaskID == task.id)
                             }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.task?.title ?? "未分配任务")
-                                    .font(.body.weight(.medium))
-                                Text(formattedTimeRange(start: entry.startAt, end: entry.endAt))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+
+                if buckets.active.isEmpty,
+                   buckets.suggested.isEmpty,
+                   buckets.archived.isEmpty {
+                    Text("没有匹配的任务")
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                }
+                }
+                .padding(8)
             }
-            // Force SwiftUI to treat each day's List as a distinct view identity, so switching
-            // dates rebuilds a fresh NSTableView instead of reloading the existing one mid-render.
-            // This sidesteps the reentrant delegate warning triggered when the underlying
-            // NSTableView tries to reconcile selection + data changes in the same pass.
-            .id(Calendar.autoupdatingCurrent.startOfDay(for: todayViewDate))
         }
     }
 
-    private var overviewInterval: DateInterval {
-        switch overviewPeriod {
-        case .today:
-            return timerEngine.aggregationService.dayInterval(for: timerEngine.now)
-        case .week:
-            return timerEngine.aggregationService.weekInterval(for: timerEngine.now)
-        case .month:
-            return timerEngine.aggregationService.monthInterval(for: timerEngine.now)
-        case .custom:
-            return timerEngine.aggregationService.customInterval(from: overviewCustomStart, to: overviewCustomEnd)
-        }
+    private var todayContent: some View {
+        TodayTaskListView(
+            date: $todayViewDate,
+            selectedTaskID: $selectedTaskID,
+            entries: entries,
+            timerEngine: timerEngine
+        )
     }
 
     private var overviewContent: some View {
@@ -459,7 +531,6 @@ struct MainWindowView: View {
             period: $overviewPeriod,
             customStart: $overviewCustomStart,
             customEnd: $overviewCustomEnd,
-            interval: overviewInterval,
             entries: entries,
             timerEngine: timerEngine,
             selectedTaskID: $selectedTaskID
@@ -497,9 +568,20 @@ struct MainWindowView: View {
             .padding(.top, 10)
 
             searchableList(title: "搜索记录", text: $searchText) {
-                List(filteredEntries, id: \.id, selection: $selectedEntryID) { entry in
-                    TimeEntryRow(entry: entry)
-                        .tag(entry.id)
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        ForEach(filteredEntries) { entry in
+                            Button {
+                                selectedEntryID = entry.id
+                            } label: {
+                                TimeEntryRow(entry: entry)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .selectionRow(isSelected: selectedEntryID == entry.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(8)
                 }
             }
         }
@@ -548,18 +630,18 @@ struct MainWindowView: View {
                     let task = WorkTask(title: "新任务", updatedAt: Date())
                     modelContext.insert(task)
                     persist()
-                    mainWindowRouter.destination = .tasks(task.id)
+                    apply(.tasks(task.id))
                 } label: {
                     Label("新建任务", systemImage: "plus")
                 }
-            case .overview:
+            case .timeline, .overview:
                 EmptyView()
             case .projects:
                 Button {
                     let project = Project()
                     modelContext.insert(project)
                     persist()
-                    mainWindowRouter.destination = .projects(project.id)
+                    apply(.projects(project.id))
                 } label: {
                     Label("新建项目", systemImage: "plus")
                 }
@@ -568,7 +650,7 @@ struct MainWindowView: View {
                     let tag = Tag()
                     modelContext.insert(tag)
                     persist()
-                    mainWindowRouter.destination = .tags(tag.id)
+                    apply(.tags(tag.id))
                 } label: {
                     Label("新建标签", systemImage: "plus")
                 }
@@ -580,7 +662,7 @@ struct MainWindowView: View {
                     let entry = TimeEntry(task: targetTask, startAt: startDate, endAt: endDate, source: .manual, createdAt: Date())
                     modelContext.insert(entry)
                     persist()
-                    mainWindowRouter.destination = .records(entry.id)
+                    apply(.records(entry.id))
                 } label: {
                     Label("新增记录", systemImage: "plus")
                 }
@@ -592,11 +674,7 @@ struct MainWindowView: View {
 
     private func apply(_ destination: MainWindowDestination) {
         let destinationSection = sectionFor(destination)
-        if selectedSection != destinationSection {
-            routedSection = destinationSection
-        }
         selectedSection = destinationSection
-        displayedSection = destinationSection
 
         switch destination {
         case .today:
@@ -616,11 +694,65 @@ struct MainWindowView: View {
         }
     }
 
+    private func selectSection(_ section: SidebarSection) {
+        guard selectedSection != section else { return }
+        selectedSection = section
+        selectedTaskID = nil
+        selectedProjectID = nil
+        selectedTagID = nil
+        selectedEntryID = nil
+    }
+
     private func persist() {
         do {
             try modelContext.save()
         } catch {
             assertionFailure("Unable to save changes: \(error)")
+        }
+    }
+
+    private func mergePendingSuggestion() {
+        guard let suggestion = pendingMergeSuggestion else { return }
+        pendingMergeSuggestion = nil
+
+        do {
+            _ = try TimeEntryMaintenanceService(modelContext: modelContext).merge(
+                suggestion,
+                entries: entries
+            )
+            timerEngine.notifyDataChanged()
+        } catch {
+            workflowErrorMessage = "记录可能已发生变化，请刷新后重试。\n\(error.localizedDescription)"
+        }
+    }
+
+    private func archivePendingTask() {
+        guard let taskID = pendingArchiveTaskID,
+              let task = tasks.first(where: { $0.id == taskID }) else {
+            pendingArchiveTaskID = nil
+            return
+        }
+        pendingArchiveTaskID = nil
+        archive([task])
+    }
+
+    private func archiveSuggestedTasks() {
+        archive(filteredTaskBuckets.suggested)
+    }
+
+    private func archive(_ tasks: [WorkTask]) {
+        guard !tasks.isEmpty else { return }
+
+        tasks.forEach {
+            $0.isArchived = true
+            $0.updatedAt = Date()
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            workflowErrorMessage = error.localizedDescription
         }
     }
 
@@ -667,6 +799,7 @@ struct MainWindowView: View {
 
             modelContext.delete(currentEntry)
             persist()
+            timerEngine.notifyDataChanged()
         }
     }
 
@@ -774,14 +907,168 @@ private struct TimeEntryRow: View {
     }
 }
 
-private struct TodayOverview: View {
-    let date: Date
-    let isToday: Bool
-    let totalDuration: TimeInterval
-    let wallClockDuration: TimeInterval
-    let summaries: [TaskSummary]
+private struct TodayTaskListView: View {
+    @EnvironmentObject private var timerMetrics: TimerMetrics
+    @Binding var date: Date
+    @Binding var selectedTaskID: UUID?
     let entries: [TimeEntry]
     let timerEngine: TimerEngine
+
+    private var isToday: Bool {
+        Calendar.autoupdatingCurrent.isDate(date, inSameDayAs: timerMetrics.now)
+    }
+
+    private var summaries: [TaskSummary] {
+        timerEngine.aggregationService.groupedDurations(on: date, entries: entries, now: timerMetrics.now)
+            .sorted { first, second in
+                let firstOrder = taskSortOrder(first.task)
+                let secondOrder = taskSortOrder(second.task)
+                if firstOrder != secondOrder { return firstOrder < secondOrder }
+                return first.duration > second.duration
+            }
+    }
+
+    private var dayEntries: [TimeEntry] {
+        let interval = timerEngine.aggregationService.dayInterval(for: date)
+        return entries.filter {
+            timerEngine.aggregationService.overlapDuration(of: $0, within: interval, now: timerMetrics.now) > 0
+        }
+    }
+
+    private var dateBinding: Binding<Date> {
+        Binding(
+            get: { date },
+            set: { newValue in
+                selectedTaskID = nil
+                date = newValue
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                DatePicker("日期", selection: dateBinding, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+
+                if !isToday {
+                    Button("回到今天") {
+                        selectedTaskID = nil
+                        date = timerMetrics.now
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    Text(isToday ? "今日任务" : "\(date.shortDateText()) 的任务")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    if summaries.isEmpty {
+                        Text("这一天没有计时记录")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                    }
+
+                    ForEach(summaries) { summary in
+                        Button {
+                            selectedTaskID = summary.task.id
+                        } label: {
+                            HStack(spacing: 10) {
+                                TaskRow(task: summary.task, timerEngine: timerEngine)
+                                Text(DurationTextFormatter.compact(summary.duration))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                selectedTaskID == summary.task.id ? Color.accentColor.opacity(0.12) : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Divider().padding(.vertical, 6)
+
+                    Text(isToday ? "最近记录" : "当日记录")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(dayEntries.prefix(12), id: \.id) { entry in
+                        Button {
+                            selectedTaskID = entry.task?.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.task?.title ?? "未分配任务")
+                                    .font(.body.weight(.medium))
+                                Text(formattedTimeRange(start: entry.startAt, end: entry.endAt))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            .id(Calendar.autoupdatingCurrent.startOfDay(for: date))
+        }
+    }
+
+    private func taskSortOrder(_ task: WorkTask) -> Int {
+        if timerEngine.isTaskRunning(task) { return 0 }
+        if timerEngine.isTaskPaused(task) { return 1 }
+        return 2
+    }
+}
+
+private struct TodayOverview: View {
+    @EnvironmentObject private var timerMetrics: TimerMetrics
+    let date: Date
+    let entries: [TimeEntry]
+    let timerEngine: TimerEngine
+
+    private var isToday: Bool {
+        Calendar.autoupdatingCurrent.isDate(date, inSameDayAs: timerMetrics.now)
+    }
+
+    private var totalDuration: TimeInterval {
+        timerEngine.aggregationService.totalDuration(on: date, entries: entries, now: timerMetrics.now)
+    }
+
+    private var wallClockDuration: TimeInterval {
+        let interval = timerEngine.aggregationService.dayInterval(for: date)
+        return timerEngine.aggregationService.wallClockDuration(in: interval, entries: entries, now: timerMetrics.now)
+    }
+
+    private var summaries: [TaskSummary] {
+        timerEngine.aggregationService.groupedDurations(on: date, entries: entries, now: timerMetrics.now)
+    }
+
+    private var dayEntries: [TimeEntry] {
+        let interval = timerEngine.aggregationService.dayInterval(for: date)
+        return entries.filter {
+            timerEngine.aggregationService.overlapDuration(of: $0, within: interval, now: timerMetrics.now) > 0
+        }
+    }
 
     private var headerTitle: String {
         isToday ? "今日总览" : "\(date.shortDateText()) 总览"
@@ -867,7 +1154,7 @@ private struct TodayOverview: View {
                     Text(recentTitle)
                         .font(.headline)
 
-                    ForEach(entries.prefix(10), id: \.id) { entry in
+                    ForEach(dayEntries.prefix(10), id: \.id) { entry in
                         TimeEntryRow(entry: entry)
                             .padding(.vertical, 6)
                     }
@@ -879,6 +1166,7 @@ private struct TodayOverview: View {
 }
 
 private struct TaskInspector: View {
+    @EnvironmentObject private var timerMetrics: TimerMetrics
     @Bindable var task: WorkTask
     let entries: [TimeEntry]
     let projects: [Project]
@@ -887,6 +1175,7 @@ private struct TaskInspector: View {
     let modelContext: ModelContext
     let onDelete: () -> Void
     let onClose: () -> Void
+    @State private var isArchiveConfirmationPresented = false
 
     private var taskEntries: [TimeEntry] {
         entries.filter { $0.task?.id == task.id }
@@ -922,9 +1211,34 @@ private struct TaskInspector: View {
                             }
                         }
 
-                        Toggle("归档任务", isOn: $task.isArchived)
+                        Toggle("归档任务", isOn: Binding(
+                            get: { task.isArchived },
+                            set: { shouldArchive in
+                                if shouldArchive {
+                                    isArchiveConfirmationPresented = true
+                                } else {
+                                    task.isArchived = false
+                                    saveTaskChanges()
+                                }
+                            }
+                        ))
                             .toggleStyle(.switch)
-                            .onChange(of: task.isArchived) { _, _ in saveTaskChanges() }
+                            .confirmationDialog(
+                                "归档这个任务？",
+                                isPresented: $isArchiveConfirmationPresented,
+                                titleVisibility: .visible
+                            ) {
+                                Button("确认归档") {
+                                    if timerEngine.isTaskRunning(task) || timerEngine.isTaskPaused(task) {
+                                        timerEngine.stop(task: task)
+                                    }
+                                    task.isArchived = true
+                                    saveTaskChanges()
+                                }
+                                Button("取消", role: .cancel) {}
+                            } message: {
+                                Text("归档后不会出现在快速任务选择中，历史工时仍会保留。")
+                            }
 
                         Text("备注")
                             .font(.headline)
@@ -939,14 +1253,14 @@ private struct TaskInspector: View {
                         HStack(spacing: 12) {
                             StatTile(
                                 title: "今日工时",
-                                value: DurationTextFormatter.compact(timerEngine.aggregationService.totalDuration(on: timerEngine.now, entries: taskEntries, now: timerEngine.now)),
+                                value: DurationTextFormatter.compact(timerEngine.aggregationService.totalDuration(on: timerMetrics.now, entries: taskEntries, now: timerMetrics.now)),
                                 systemImage: "sun.max.fill",
                                 accent: Color(hexString: PaletteColor.lemon.rawValue)
                             )
 
                             StatTile(
                                 title: "累计工时",
-                                value: DurationTextFormatter.compact(timerEngine.aggregationService.totalDuration(for: task, entries: taskEntries, now: timerEngine.now)),
+                                value: DurationTextFormatter.compact(timerEngine.aggregationService.totalDuration(for: task, entries: taskEntries, now: timerMetrics.now)),
                                 systemImage: "clock.arrow.circlepath",
                                 accent: Color(hexString: PaletteColor.sky.rawValue)
                             )
@@ -1302,6 +1616,7 @@ private struct TimeEntryInspector: View {
     private func persist() {
         do {
             try modelContext.save()
+            timerEngine.notifyDataChanged()
         } catch {
             assertionFailure("Unable to save entry changes: \(error)")
         }
@@ -1334,35 +1649,59 @@ private extension View {
     func searchableList(title: String, text: Binding<String>, @ViewBuilder content: () -> some View) -> some View {
         SearchableList(title: title, text: text, content: content)
     }
+
+    func selectionRow(isSelected: Bool) -> some View {
+        self
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(Rectangle())
+    }
 }
 
 private struct OverviewContentView: View {
+    @EnvironmentObject private var timerMetrics: TimerMetrics
     @Binding var period: OverviewPeriod
     @Binding var customStart: Date
     @Binding var customEnd: Date
-    let interval: DateInterval
     let entries: [TimeEntry]
     let timerEngine: TimerEngine
     @Binding var selectedTaskID: UUID?
 
+    private var interval: DateInterval {
+        switch period {
+        case .today:
+            return timerEngine.aggregationService.dayInterval(for: timerMetrics.now)
+        case .week:
+            return timerEngine.aggregationService.weekInterval(for: timerMetrics.now)
+        case .month:
+            return timerEngine.aggregationService.monthInterval(for: timerMetrics.now)
+        case .custom:
+            return timerEngine.aggregationService.customInterval(from: customStart, to: customEnd)
+        }
+    }
+
     private var totalDuration: TimeInterval {
-        timerEngine.aggregationService.totalDuration(in: interval, entries: entries, now: timerEngine.now)
+        timerEngine.aggregationService.totalDuration(in: interval, entries: entries, now: timerMetrics.now)
     }
 
     private var wallClockDuration: TimeInterval {
-        timerEngine.aggregationService.wallClockDuration(in: interval, entries: entries, now: timerEngine.now)
+        timerEngine.aggregationService.wallClockDuration(in: interval, entries: entries, now: timerMetrics.now)
     }
 
     private var taskSummaries: [TaskSummary] {
-        timerEngine.aggregationService.groupedDurations(in: interval, entries: entries, now: timerEngine.now)
+        timerEngine.aggregationService.groupedDurations(in: interval, entries: entries, now: timerMetrics.now)
     }
 
     private var projectSummaries: [ProjectSummary] {
-        timerEngine.aggregationService.groupedByProject(in: interval, entries: entries, now: timerEngine.now)
+        timerEngine.aggregationService.groupedByProject(in: interval, entries: entries, now: timerMetrics.now)
     }
 
     private var tagSummaries: [TagSummary] {
-        timerEngine.aggregationService.groupedByTag(in: interval, entries: entries, now: timerEngine.now)
+        timerEngine.aggregationService.groupedByTag(in: interval, entries: entries, now: timerMetrics.now)
     }
 
     private var rangeTitle: String {

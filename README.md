@@ -18,8 +18,11 @@
 - 并行任务工作台：可同时跑多个任务，主任务逻辑自动轮换
 - 大号计时器与今日累计工时
 - 今日 Tab 顶部日期选择器，可浏览任意一天的任务与记录
+- 独立时间轴：24 小时视图、并行分轨、异常标记、记录编辑与相邻碎片合并
 - 总览 Tab：今日 / 本周 / 本月 / 自定义区间四种范围；展示累计工时、墙钟时长，按任务 / 项目 / 标签三维度细分
 - 任务、项目、标签、计时记录管理
+- 快速新建支持继承 / 切换项目、按项目名和 YT 编号搜索，并提示复用重复任务
+- 任务按活跃、30 天未使用建议归档、已归档分组展示
 - 设置面板：刘海显示开关、菜单栏计时显示开关，偏好持久化保存
 - 手动补录和修正工时记录
 - 本地 SwiftData 持久化
@@ -68,6 +71,8 @@ swift test
 - 并行启动多个任务时分别持有独立的打开记录
 - 暂停一个任务不影响其它任务、停止全部时只保留已关闭的记录
 - 主任务在停止 / 暂停后按规则轮换
+- 时间轴跨午夜裁切、并行分轨、异常识别与相邻记录合并
+- 快速任务搜索、重复识别和 30 天归档建议
 - 手动修改记录后聚合结果刷新
 - 用户偏好默认值与 UserDefaults 持久化
 - 刘海几何识别（含模拟刘海回退、安全区与辅助区域宽度判断）
@@ -97,7 +102,7 @@ swift test
 支持通过环境变量覆盖版本号：
 
 ```bash
-MARKETING_VERSION=1.2.0 BUILD_NUMBER=3 ./scripts/build_app.sh
+MARKETING_VERSION=1.5.0 BUILD_NUMBER=8 ./scripts/build_app.sh
 ```
 
 重新生成应用图标可运行：
@@ -137,6 +142,7 @@ MARKETING_VERSION=1.2.0 BUILD_NUMBER=3 ./scripts/build_app.sh
 │   └── generate_app_icon.swift
 ├── Sources/MyWorkingHoursApp/
 │   ├── AppSettings.swift
+│   ├── DailyTimelineView.swift
 │   ├── MainWindowRouter.swift
 │   ├── MainWindowView.swift
 │   ├── MenuBarContentView.swift
@@ -150,10 +156,12 @@ MARKETING_VERSION=1.2.0 BUILD_NUMBER=3 ./scripts/build_app.sh
 │   ├── QuickTaskSwitcherView.swift
 │   ├── TimeAggregationService.swift
 │   ├── TimerEngine.swift
-│   └── Utilities.swift
+│   ├── Utilities.swift
+│   └── WorkflowServices.swift
 └── Tests/MyWorkingHoursAppTests/
     ├── MyWorkingHoursAppTests.swift
-    └── NotchOverlayGeometryTests.swift
+    ├── NotchOverlayGeometryTests.swift
+    └── WorkflowServicesTests.swift
 ```
 
 ## 当前设计说明
@@ -165,7 +173,7 @@ MARKETING_VERSION=1.2.0 BUILD_NUMBER=3 ./scripts/build_app.sh
   - 单次计时持续时间
   - 开始 / 暂停 / 停止按钮
 - 长任务名会在横条内自动滚动展示
-- 主界面分三栏：侧边栏导航 / 中间内容 / 右侧详情；侧边栏含 今日 / 总览 / 任务 / 项目 / 标签 / 记录 / 设置 七个入口，中间栏有最小宽度保证总览布局
+- 主界面分三栏：侧边栏导航 / 中间内容 / 右侧详情；时间轴入口使用中栏展示日期和修正建议、右栏展示 24 小时分轨视图
 - 设置项保存在本地 `UserDefaults`，关闭刘海显示后会自动拆除已有面板，菜单中也会隐藏刘海相关入口
 
 ## 当前限制

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarLabelView: View {
     @EnvironmentObject private var timerEngine: TimerEngine
+    @EnvironmentObject private var timerMetrics: TimerMetrics
     @EnvironmentObject private var appSettings: AppSettings
 
     var body: some View {
@@ -10,7 +11,7 @@ struct MenuBarLabelView: View {
                 if timerEngine.runningCount > 0 {
                     HStack(spacing: 4) {
                         Image(systemName: "timer")
-                        Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
+                        Text(DurationTextFormatter.clock(timerMetrics.primarySessionDuration))
                             .monospacedDigit()
                     }
                     .foregroundStyle(timerEngine.timerState.status.tint)
@@ -30,6 +31,7 @@ struct MenuBarLabelView: View {
 
 struct MenuBarContentView: View {
     @EnvironmentObject private var timerEngine: TimerEngine
+    @EnvironmentObject private var timerMetrics: TimerMetrics
     @EnvironmentObject private var overlayController: NotchOverlayController
     @EnvironmentObject private var mainWindowRouter: MainWindowRouter
     @EnvironmentObject private var appSettings: AppSettings
@@ -71,21 +73,21 @@ struct MenuBarContentView: View {
             // Duration panel
             GlassPanel(cornerRadius: 24) {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
+                    Text(DurationTextFormatter.clock(timerMetrics.primarySessionDuration))
                         .font(.system(size: 38, weight: .semibold, design: .rounded))
                         .monospacedDigit()
 
                     HStack(spacing: 12) {
                         StatTile(
                             title: "累计工时",
-                            value: DurationTextFormatter.compact(timerEngine.todayTotalDuration),
+                            value: DurationTextFormatter.compact(timerMetrics.todayTotalDuration),
                             systemImage: "calendar.badge.clock",
                             accent: Color(hexString: PaletteColor.lemon.rawValue)
                         )
 
                         StatTile(
                             title: "实际经过",
-                            value: DurationTextFormatter.compact(timerEngine.todayWallClockDuration),
+                            value: DurationTextFormatter.compact(timerMetrics.todayWallClockDuration),
                             systemImage: "clock.fill",
                             accent: Color(hexString: PaletteColor.sky.rawValue)
                         )

@@ -1,4 +1,6 @@
+import AppKit
 import SwiftData
+import SwiftUI
 import XCTest
 @testable import MyWorkingHoursApp
 
@@ -528,5 +530,136 @@ final class MyWorkingHoursAppTests: XCTestCase {
         // B should still be running
         XCTAssertTrue(engine.isTaskRunning(taskB))
         XCTAssertEqual(engine.runningCount, 1)
+    }
+
+    func testMainWindowRoutesDoNotCreateTableViews() async throws {
+        let clock = TestClock(Date(timeIntervalSince1970: 1_700_000_000))
+        let (store, engine) = makeEngine(clock: clock)
+        let context = store.modelContainer.mainContext
+
+        let project = Project(name: "测试项目")
+        let tag = Tag(name: "测试标签")
+        context.insert(project)
+        context.insert(tag)
+        let task = engine.createTask(named: "测试任务", project: project)
+        task.tags.append(tag)
+        engine.start(task: task)
+        clock.now = clock.now.addingTimeInterval(60)
+        engine.stop(task: task)
+        let entry = try XCTUnwrap(context.fetch(FetchDescriptor<TimeEntry>()).first)
+
+        let router = MainWindowRouter()
+        let defaults = UserDefaults(suiteName: UUID().uuidString) ?? .standard
+        let settings = AppSettings(defaults: defaults)
+        let rootView = MainWindowView()
+            .environmentObject(engine)
+            .environmentObject(engine.metrics)
+            .environmentObject(router)
+            .environmentObject(settings)
+            .modelContainer(store.modelContainer)
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 1_320, height: 840)
+
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+
+        let destinations: [(String, MainWindowDestination)] = [
+            ("today", .today),
+            ("overview", .overview),
+            ("tasks", .tasks(task.id)),
+            ("projects", .projects(project.id)),
+            ("tags", .tags(tag.id)),
+            ("records", .records(entry.id)),
+            ("settings", .settings),
+        ]
+
+        for (name, destination) in destinations {
+            router.destination = destination
+            await Task.yield()
+            hostingView.layoutSubtreeIfNeeded()
+            await Task.yield()
+            hostingView.layoutSubtreeIfNeeded()
+
+            XCTAssertTrue(
+                hostingView.descendants(of: NSTableView.self).isEmpty,
+                "Route \(name) unexpectedly rendered an NSTableView"
+            )
+        }
+
+        let timelineSidebar = NSHostingView(
+            rootView: TimelineDaySidebar(
+                date: .constant(clock.now),
+                entries: [entry],
+                workflowService: TimelineWorkflowService(),
+                aggregationService: engine.aggregationService,
+                onEdit: { _ in },
+                onRequestMerge: { _ in }
+            )
+            .environmentObject(engine.metrics)
+        )
+        timelineSidebar.frame = NSRect(x: 0, y: 0, width: 420, height: 840)
+        timelineSidebar.layoutSubtreeIfNeeded()
+        XCTAssertTrue(timelineSidebar.descendants(of: NSTableView.self).isEmpty)
+
+        let timelineDetail = NSHostingView(
+            rootView: DailyTimelineView(
+                date: clock.now,
+                entries: [entry],
+                workflowService: TimelineWorkflowService(),
+                onEdit: { _ in }
+            )
+            .environmentObject(engine.metrics)
+        )
+        timelineDetail.frame = NSRect(x: 0, y: 0, width: 900, height: 840)
+        timelineDetail.layoutSubtreeIfNeeded()
+        XCTAssertTrue(timelineDetail.descendants(of: NSTableView.self).isEmpty)
+    }
+
+    func testCreateAndStartTaskDoNotReloadUnchangedEntryCache() throws {
+        let clock = TestClock(Date(timeIntervalSince1970: 1_700_000_000))
+        let (store, engine) = makeEngine(clock: clock)
+        let context = store.modelContainer.mainContext
+
+        let existingTask = WorkTask(title: "历史任务", createdAt: clock.now, updatedAt: clock.now)
+        let existingEntry = TimeEntry(
+            task: existingTask,
+            startAt: clock.now.addingTimeInterval(-3_600),
+            endAt: clock.now,
+            source: .manual,
+            createdAt: clock.now
+        )
+        context.insert(existingTask)
+        context.insert(existingEntry)
+        store.save(context)
+
+        XCTAssertEqual(engine.todayTotalDuration, 0, accuracy: 0.1)
+
+        let newTask = engine.createTask(named: "快速创建")
+        engine.start(task: newTask)
+
+        XCTAssertEqual(
+            engine.todayTotalDuration,
+            0,
+            accuracy: 0.1,
+            "Create/start should update the existing cache incrementally instead of reloading all entries"
+        )
+
+        engine.notifyDataChanged()
+        XCTAssertEqual(engine.todayTotalDuration, 3_600, accuracy: 0.1)
+    }
+
+}
+
+private extension NSView {
+    func descendants<ViewType: NSView>(of type: ViewType.Type) -> [ViewType] {
+        subviews.flatMap { subview in
+            let current = (subview as? ViewType).map { [$0] } ?? []
+            return current + subview.descendants(of: type)
+        }
     }
 }

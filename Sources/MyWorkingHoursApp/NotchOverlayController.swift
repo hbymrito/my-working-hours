@@ -192,6 +192,7 @@ final class NotchOverlayController: NSObject, ObservableObject {
         overlayPanel.contentView = NSHostingView(
             rootView: NotchOverlayView()
                 .environmentObject(timerEngine)
+                .environmentObject(timerEngine.metrics)
                 .environmentObject(self)
                 .environmentObject(mainWindowRouter)
         )

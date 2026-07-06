@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NotchOverlayView: View {
     @EnvironmentObject private var timerEngine: TimerEngine
+    @EnvironmentObject private var timerMetrics: TimerMetrics
     @EnvironmentObject private var overlayController: NotchOverlayController
     @EnvironmentObject private var mainWindowRouter: MainWindowRouter
 
@@ -96,7 +97,7 @@ struct NotchOverlayView: View {
 
             Spacer(minLength: 0)
 
-            Text(DurationTextFormatter.clock(timerEngine.primarySessionDuration))
+            Text(DurationTextFormatter.clock(timerMetrics.primarySessionDuration))
                 .font(.system(size: clockFontSize, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(foregroundColor)
