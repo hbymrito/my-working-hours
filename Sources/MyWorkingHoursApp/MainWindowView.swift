@@ -41,6 +41,36 @@ private enum SidebarSection: String, CaseIterable, Hashable, Identifiable {
     }
 }
 
+func dateFollowingDayRollover(
+    _ selectedDate: Date,
+    from previousDay: Date,
+    to currentDay: Date,
+    calendar: Calendar
+) -> Date {
+    calendar.isDate(selectedDate, inSameDayAs: previousDay) ? currentDay : selectedDate
+}
+
+func selectionAfterAutomaticDayChange(_ selection: UUID?, visibleIDs: Set<UUID>) -> UUID? {
+    guard let selection, visibleIDs.contains(selection) else { return nil }
+    return selection
+}
+
+private struct SidebarItemLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .frame(width: 24, alignment: .center)
+                .accessibilityHidden(true)
+            Text(title)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct MainWindowView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var timerEngine: TimerEngine
@@ -113,7 +143,11 @@ struct MainWindowView: View {
     }
 
     private var filteredEntries: [TimeEntry] {
-        let interval = timerEngine.aggregationService.dayInterval(for: recordFilterDate)
+        filteredEntries(on: recordFilterDate)
+    }
+
+    private func filteredEntries(on date: Date) -> [TimeEntry] {
+        let interval = timerEngine.aggregationService.dayInterval(for: date)
 
         return entries.filter { entry in
             guard timerEngine.aggregationService.overlapDuration(of: entry, within: interval, now: timerEngine.now) > 0 else {
@@ -149,11 +183,11 @@ struct MainWindowView: View {
                         Button {
                             selectSection(section)
                         } label: {
-                            Label(section.title, systemImage: section.systemImage)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            SidebarItemLabel(title: section.title, systemImage: section.systemImage)
                                 .selectionRow(isSelected: selectedSection == section)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(section.title)
                     }
                 }
                 .padding(8)
@@ -172,6 +206,9 @@ struct MainWindowView: View {
         }
         .onChange(of: mainWindowRouter.destination, initial: true) { _, destination in
             apply(destination)
+        }
+        .onChange(of: timerEngine.currentDay) { previousDay, currentDay in
+            followDayRollover(from: previousDay, to: currentDay)
         }
         .sheet(isPresented: Binding(
             get: { timelineEditingEntryID != nil },
@@ -701,6 +738,47 @@ struct MainWindowView: View {
         selectedProjectID = nil
         selectedTagID = nil
         selectedEntryID = nil
+    }
+
+    private func followDayRollover(from previousDay: Date, to currentDay: Date) {
+        let calendar = timerEngine.aggregationService.calendar
+        let todayWasFollowing = calendar.isDate(todayViewDate, inSameDayAs: previousDay)
+        let recordWasFollowing = calendar.isDate(recordFilterDate, inSameDayAs: previousDay)
+
+        todayViewDate = dateFollowingDayRollover(
+            todayViewDate,
+            from: previousDay,
+            to: currentDay,
+            calendar: calendar
+        )
+        timelineViewDate = dateFollowingDayRollover(
+            timelineViewDate,
+            from: previousDay,
+            to: currentDay,
+            calendar: calendar
+        )
+        recordFilterDate = dateFollowingDayRollover(
+            recordFilterDate,
+            from: previousDay,
+            to: currentDay,
+            calendar: calendar
+        )
+
+        if todayWasFollowing,
+           selectedSection == .today {
+            let visibleTaskIDs = Set(timerEngine.aggregationService.groupedDurations(
+                on: currentDay,
+                entries: entries,
+                now: timerEngine.now
+            ).map(\.task.id))
+            selectedTaskID = selectionAfterAutomaticDayChange(selectedTaskID, visibleIDs: visibleTaskIDs)
+        }
+
+        if recordWasFollowing,
+           selectedSection == .records {
+            let visibleEntryIDs = Set(filteredEntries(on: currentDay).map(\.id))
+            selectedEntryID = selectionAfterAutomaticDayChange(selectedEntryID, visibleIDs: visibleEntryIDs)
+        }
     }
 
     private func persist() {

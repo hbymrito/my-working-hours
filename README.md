@@ -102,7 +102,7 @@ swift test
 支持通过环境变量覆盖版本号：
 
 ```bash
-MARKETING_VERSION=1.5.0 BUILD_NUMBER=8 ./scripts/build_app.sh
+MARKETING_VERSION=1.5.1 BUILD_NUMBER=9 ./scripts/build_app.sh
 ```
 
 重新生成应用图标可运行：

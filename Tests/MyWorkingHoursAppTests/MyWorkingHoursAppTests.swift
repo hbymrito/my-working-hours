@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftData
 import SwiftUI
 import XCTest
@@ -505,12 +506,115 @@ final class MyWorkingHoursAppTests: XCTestCase {
 
         // Advance to 00:10 next day
         clock.now = calendar.date(from: DateComponents(year: 2026, month: 4, day: 16, hour: 0, minute: 10))!
-        engine.refreshSnapshot()
+        engine.tickRefresh()
 
         // Wall clock for day 16 should be 10 minutes (00:00 - 00:10)
         XCTAssertEqual(engine.todayWallClockDuration, 600, accuracy: 1)
         // Total duration for day 16 should also be 10 minutes
         XCTAssertEqual(engine.todayTotalDuration, 600, accuracy: 1)
+        XCTAssertEqual(engine.currentDay, calendar.startOfDay(for: clock.now))
+    }
+
+    func testCurrentDayPublishesOnlyWhenHeartbeatCrossesMidnight() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let initialDate = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 15, hour: 8)
+        ))
+        let clock = TestClock(initialDate)
+        let (_, engine) = makeEngine(clock: clock)
+        var publishedDays: [Date] = []
+        let cancellable = engine.$currentDay
+            .dropFirst()
+            .sink { publishedDays.append($0) }
+
+        clock.now = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 15, hour: 23, minute: 59, second: 59)
+        ))
+        engine.tickRefresh()
+        XCTAssertTrue(publishedDays.isEmpty)
+
+        clock.now = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 16, second: 1)
+        ))
+        engine.tickRefresh()
+        XCTAssertEqual(publishedDays, [calendar.startOfDay(for: clock.now)])
+
+        clock.now = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 16, hour: 12)
+        ))
+        engine.tickRefresh()
+        XCTAssertEqual(publishedDays.count, 1)
+
+        engine.refreshSnapshot()
+        XCTAssertEqual(publishedDays.count, 1)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    func testRefreshDetectsSameDayOfMonthAfterLongSleep() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let initialDate = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 15, hour: 20)
+        ))
+        let clock = TestClock(initialDate)
+        let (_, engine) = makeEngine(clock: clock)
+
+        clock.now = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 6, day: 15, hour: 9)
+        ))
+        engine.refreshSnapshot()
+
+        XCTAssertEqual(engine.currentDay, calendar.startOfDay(for: clock.now))
+    }
+
+    func testDayRolloverPolicyUpdatesFollowingDatesAndPreservesHistory() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let previousDay = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 30)
+        ))
+        let currentDay = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 5, day: 1)
+        ))
+        let followingDates = try [8, 12, 20].map { hour in
+            try XCTUnwrap(calendar.date(
+                from: DateComponents(year: 2026, month: 4, day: 30, hour: hour)
+            ))
+        }
+
+        for selectedDate in followingDates {
+            XCTAssertEqual(
+                dateFollowingDayRollover(
+                    selectedDate,
+                    from: previousDay,
+                    to: currentDay,
+                    calendar: calendar
+                ),
+                currentDay
+            )
+        }
+
+        let historicalDate = try XCTUnwrap(calendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 27, hour: 14)
+        ))
+        XCTAssertEqual(
+            dateFollowingDayRollover(
+                historicalDate,
+                from: previousDay,
+                to: currentDay,
+                calendar: calendar
+            ),
+            historicalDate
+        )
+    }
+
+    func testAutomaticDayChangeKeepsOnlyVisibleDetailSelection() {
+        let selectedID = UUID()
+
+        XCTAssertEqual(
+            selectionAfterAutomaticDayChange(selectedID, visibleIDs: [selectedID]),
+            selectedID
+        )
+        XCTAssertNil(selectionAfterAutomaticDayChange(selectedID, visibleIDs: []))
+        XCTAssertNil(selectionAfterAutomaticDayChange(nil, visibleIDs: [selectedID]))
     }
 
     func testDeleteRunningEntryOnlyAffectsItsTask() throws {

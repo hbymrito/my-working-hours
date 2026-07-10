@@ -81,6 +81,7 @@ final class TimerEngine: ObservableObject {
     @Published private(set) var primaryRunningEntry: TimeEntry?
     @Published private(set) var runningCount: Int = 0
     @Published private(set) var pausedCount: Int = 0
+    @Published private(set) var currentDay: Date
 
     let aggregationService: TimeAggregationService
     let metrics: TimerMetrics
@@ -103,8 +104,6 @@ final class TimerEngine: ObservableObject {
     private var cachedAllEntries: [TimeEntry] = []
     private var cachedTodayEntries: [TimeEntry] = []
     private var entriesDirty = true
-    /// Track the last day we refreshed for midnight rollover detection.
-    private var lastRefreshDay: Int = -1
 
     init(
         context: ModelContext,
@@ -121,7 +120,7 @@ final class TimerEngine: ObservableObject {
         let initialNow = nowProvider()
         metrics = TimerMetrics(now: initialNow)
         timerState = stateStore.load() ?? .idle(now: initialNow)
-        lastRefreshDay = aggregationService.calendar.component(.day, from: initialNow)
+        currentDay = aggregationService.calendar.startOfDay(for: initialNow)
 
         // Force full fetch on first refresh
         entriesDirty = true
@@ -342,13 +341,11 @@ final class TimerEngine: ObservableObject {
 
     /// Tick-only refresh: recalculates durations without re-fetching entries from DB.
     /// Called by the 1-second heartbeat timer.
-    private func tickRefresh() {
+    func tickRefresh() {
         let timestamp = nowProvider()
 
         // Detect midnight rollover
-        let currentDay = aggregationService.calendar.component(.day, from: timestamp)
-        if currentDay != lastRefreshDay {
-            lastRefreshDay = currentDay
+        if updateCurrentDay(at: timestamp) {
             invalidateCache()
         }
 
@@ -370,9 +367,7 @@ final class TimerEngine: ObservableObject {
 
     func refreshSnapshot() {
         let timestamp = nowProvider()
-
-        let currentDay = aggregationService.calendar.component(.day, from: timestamp)
-        lastRefreshDay = currentDay
+        updateCurrentDay(at: timestamp)
 
         // Full re-fetch from DB
         cachedOpenEntries = fetchOpenEntries()
@@ -386,6 +381,14 @@ final class TimerEngine: ObservableObject {
         repairStateIfNeeded(openEntries: cachedOpenEntries)
 
         publishSnapshot(at: timestamp)
+    }
+
+    @discardableResult
+    private func updateCurrentDay(at timestamp: Date) -> Bool {
+        let day = aggregationService.calendar.startOfDay(for: timestamp)
+        guard day != currentDay else { return false }
+        currentDay = day
+        return true
     }
 
     private func publishSnapshot(at timestamp: Date) {
